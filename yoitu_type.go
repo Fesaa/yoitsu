@@ -78,6 +78,7 @@ type GeneratedType interface {
 	// And their union contains the same elements as each subset on her own
 	SameType(other GeneratedType) bool
 	JsonType() JsonType
+	Imports() []string
 	// SameJsonType return true if the underlying JsonType is the same. This is a simple name check
 	SameJsonType(other GeneratedType) bool
 	IsComplexObject() bool
@@ -128,6 +129,7 @@ type GeneratedTypeMap = map[string]GeneratedType
 
 type generatedType struct {
 	jsonType JsonType
+	imports  []string
 	types    GeneratedTypeMap
 }
 
@@ -166,6 +168,10 @@ func (gt *generatedType) SameJsonType(other GeneratedType) bool {
 
 func (gt *generatedType) JsonType() JsonType {
 	return gt.jsonType
+}
+
+func (gt *generatedType) Imports() []string {
+	return gt.imports
 }
 
 func (gt *generatedType) IsComplexObject() bool {
@@ -264,25 +270,24 @@ func parse(name string, value interface{}, universe Universe) (GeneratedType, er
 }
 
 func (gt *generatedType) Representation() []*ast.GenDecl {
+	fieldList := ast.FieldList{}
+
 	structDecl := ast.GenDecl{
 		Tok: token.TYPE,
 		Specs: []ast.Spec{
 			&ast.TypeSpec{
 				Name: ast.NewIdent(gt.JsonType().TypeName()),
 				Type: &ast.StructType{
-					Fields: &ast.FieldList{
-						List: []*ast.Field{},
-					},
+					Fields: &fieldList,
 				},
 			},
 		},
 	}
 
-	innerTypes := []*ast.GenDecl{&structDecl}
+	newTypes := []*ast.GenDecl{&structDecl}
+	var imports []ast.Spec
 
 	for name, g := range gt.types {
-		l := structDecl.Specs[0].(*ast.TypeSpec).Type.(*ast.StructType).Fields.List
-
 		field := &ast.Field{
 			Names: []*ast.Ident{ast.NewIdent(name)},
 			Type:  ast.NewIdent(g.JsonType().TypeName()),
@@ -292,13 +297,30 @@ func (gt *generatedType) Representation() []*ast.GenDecl {
 			},
 		}
 
-		structDecl.Specs[0].(*ast.TypeSpec).Type.(*ast.StructType).Fields.List = append(l, field)
+		fieldList.List = append(fieldList.List, field)
 
 		if g.IsComplexObject() {
-			innerTypes = append(innerTypes, g.Representation()...)
+			newTypes = append(newTypes, g.Representation()...)
 		}
 
+		for _, s := range g.Imports() {
+			imports = append(imports, &ast.ImportSpec{
+				Path: &ast.BasicLit{
+					Kind:  token.STRING,
+					Value: fmt.Sprintf("\"%s\"", s),
+				},
+			})
+		}
 	}
 
-	return innerTypes
+	if len(imports) == 0 {
+		return newTypes
+	}
+
+	importDecl := &ast.GenDecl{
+		Tok:   token.IMPORT,
+		Specs: imports,
+	}
+
+	return append([]*ast.GenDecl{importDecl}, newTypes...)
 }
