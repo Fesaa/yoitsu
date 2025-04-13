@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/token"
 	"slices"
+	"unicode"
 )
 
 func ParseTypes(name string, data []interface{}, universe Universe) (GeneratedType, error) {
@@ -276,6 +277,33 @@ func parse(name string, value interface{}, universe Universe) (GeneratedType, er
 	return nil, fmt.Errorf("unknown type found in json %T", value)
 }
 
+func toSafeGoName(name string) string {
+	// Ensure Field is a valid name
+	if len(name) > 0 && !unicode.IsLetter(rune(name[0])) {
+		name = "F" + name
+	}
+
+	if len(name) > 0 {
+		runes := []rune(name)
+		runes[0] = unicode.ToUpper(runes[0])
+		name = string(runes)
+	}
+
+	var camelCaseName string
+	for i, r := range name {
+		if r == '_' && i+1 < len(name) {
+			continue
+		}
+		if i > 0 && name[i-1] == '_' {
+			camelCaseName += string(unicode.ToUpper(r))
+		} else {
+			camelCaseName += string(r)
+		}
+	}
+
+	return camelCaseName
+}
+
 func (gt *generatedType) Representation() []*ast.GenDecl {
 	fieldList := ast.FieldList{}
 
@@ -283,7 +311,7 @@ func (gt *generatedType) Representation() []*ast.GenDecl {
 		Tok: token.TYPE,
 		Specs: []ast.Spec{
 			&ast.TypeSpec{
-				Name: ast.NewIdent(gt.JsonType().TypeName()),
+				Name: ast.NewIdent(toSafeGoName(gt.jsonType.TypeName())),
 				Type: &ast.StructType{
 					Fields: &fieldList,
 				},
@@ -297,7 +325,7 @@ func (gt *generatedType) Representation() []*ast.GenDecl {
 
 	for name, g := range gt.types {
 		field := &ast.Field{
-			Names: []*ast.Ident{ast.NewIdent(name)},
+			Names: []*ast.Ident{ast.NewIdent(toSafeGoName(name))},
 			Type:  ast.NewIdent(g.JsonType().TypeName()),
 			Tag: &ast.BasicLit{
 				Kind:  token.STRING,
