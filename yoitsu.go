@@ -90,7 +90,7 @@ func (y *yoitsu) Generate() error {
 	}
 
 	if gType == nil {
-		return ErrorNoData
+		return ErrNoData
 	}
 
 	structDecl := gType.Representation()

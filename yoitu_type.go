@@ -40,7 +40,7 @@ func ParseTypes(name string, data []interface{}, universe Universe) (GeneratedTy
 	}
 
 	if len(types) == 0 {
-		return &generatedType{}, ErrorNoData
+		return &generatedType{}, ErrNoData
 	}
 
 	gt := types[0]
@@ -115,7 +115,7 @@ func (gt *generatedArrayType) SameType(o GeneratedType) bool {
 func (gt *generatedArrayType) Merge(o GeneratedType) error {
 	other, ok := o.(*generatedArrayType)
 	if !ok {
-		return fmt.Errorf("cannot merge array with non array type")
+		return ErrCantMergeDifferentTypes
 	}
 
 	// Overwrite generic types, or ignore them
@@ -140,8 +140,10 @@ type generatedType struct {
 }
 
 func (gt *generatedType) SameType(o GeneratedType) bool {
-	// JsonType is the same, so can't be an array
-	other := o.(*generatedType)
+	other, ok := o.(*generatedType)
+	if !ok {
+		return false
+	}
 
 	if len(gt.types) != len(other.types) {
 		return false
@@ -196,10 +198,14 @@ func (gt *generatedType) IsComplexObject() bool {
 }
 
 func (gt *generatedType) Merge(o GeneratedType) error {
-	if !gt.SameJsonType(o) {
-		return fmt.Errorf("cannot merge different jsonType types %s -> %s", gt.jsonType, o.JsonType())
+	other, ok := o.(*generatedType)
+	if !ok {
+		return ErrCantMergeDifferentTypes
 	}
-	other := o.(*generatedType)
+
+	if _, ok = gt.JsonType().(JsonPrimitive); ok {
+		return nil
+	}
 
 	for name, otherGType := range other.types {
 		gType, ok := gt.types[name]
@@ -266,7 +272,7 @@ func parse(name string, value interface{}, universe Universe) (GeneratedType, er
 		if err != nil {
 			return nil, err
 		}
-		return objectType, nil
+		return universe.FindType(objectType), nil
 	case []interface{}:
 		arrayType, err := ParseTypes(name, value.([]interface{}), universe)
 		if err != nil {
