@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"strings"
 	"unicode"
 )
 
@@ -35,7 +36,7 @@ func ParseTypes(name string, data []interface{}, universe Universe) (GeneratedTy
 			continue
 		}
 
-		types = append(types, gType)
+		types = append(types, universe.FindType(gType))
 	}
 
 	if len(types) == 0 {
@@ -219,7 +220,7 @@ func (gt *generatedType) Merge(o GeneratedType) error {
 
 func (gt *generatedType) parse(data JsonMap, universe Universe) error {
 	for name, value := range data {
-		gType, err := parse(name, value, universe)
+		gType, err := parse(gt.JsonType().TypeName()+name, value, universe)
 		if err != nil {
 			return err
 		}
@@ -265,7 +266,7 @@ func parse(name string, value interface{}, universe Universe) (GeneratedType, er
 		if err != nil {
 			return nil, err
 		}
-		return universe.FindType(objectType), nil
+		return objectType, nil
 	case []interface{}:
 		arrayType, err := ParseTypes(name, value.([]interface{}), universe)
 		if err != nil {
@@ -287,7 +288,7 @@ func parse(name string, value interface{}, universe Universe) (GeneratedType, er
 
 func toSafeGoName(name string) string {
 	// Ensure Field is a valid name
-	if len(name) > 0 && !unicode.IsLetter(rune(name[0])) {
+	if len(name) > 0 && !unicode.IsLetter(rune(name[0])) && !strings.HasPrefix(name, "[]") {
 		name = "F" + name
 	}
 
@@ -330,9 +331,14 @@ func (gt *generatedType) Representation() []*ast.GenDecl {
 	newTypes := []*ast.GenDecl{&structDecl}
 
 	for name, g := range gt.types {
+		typeName := g.JsonType().TypeName()
+		if g.IsComplexObject() {
+			typeName = toSafeGoName(g.JsonType().TypeName())
+		}
+
 		field := &ast.Field{
 			Names: []*ast.Ident{ast.NewIdent(toSafeGoName(name))},
-			Type:  ast.NewIdent(g.JsonType().TypeName()),
+			Type:  ast.NewIdent(typeName),
 			Tag: &ast.BasicLit{
 				Kind:  token.STRING,
 				Value: fmt.Sprintf("`json:\"%s\"`", name),

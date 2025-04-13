@@ -9,7 +9,11 @@ type JsonType interface {
 }
 
 type JsonObject struct {
-	JsonPrimitive
+	inner JsonPrimitive
+}
+
+func (j JsonObject) TypeName() string {
+	return j.inner.TypeName()
 }
 
 type JsonArray struct {
