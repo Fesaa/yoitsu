@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
-	"slices"
 	"unicode"
 )
 
@@ -177,7 +176,16 @@ func (gt *generatedType) JsonType() JsonType {
 }
 
 func (gt *generatedType) Imports() []string {
-	return gt.imports
+	var imports []string
+	for _, i := range gt.imports {
+		imports = append(imports, i)
+	}
+
+	for _, gType := range gt.types {
+		imports = append(imports, gType.Imports()...)
+	}
+
+	return imports
 }
 
 func (gt *generatedType) IsComplexObject() bool {
@@ -320,8 +328,6 @@ func (gt *generatedType) Representation() []*ast.GenDecl {
 	}
 
 	newTypes := []*ast.GenDecl{&structDecl}
-	var imports []ast.Spec
-	var addedImports []string
 
 	for name, g := range gt.types {
 		field := &ast.Field{
@@ -338,31 +344,7 @@ func (gt *generatedType) Representation() []*ast.GenDecl {
 		if g.IsComplexObject() {
 			newTypes = append(newTypes, g.Representation()...)
 		}
-
-		for _, s := range g.Imports() {
-			if slices.Contains(addedImports, s) {
-				continue
-			}
-
-			imports = append(imports, &ast.ImportSpec{
-				Path: &ast.BasicLit{
-					Kind:  token.STRING,
-					Value: fmt.Sprintf("\"%s\"", s),
-				},
-			})
-
-			addedImports = append(addedImports, s)
-		}
 	}
 
-	if len(imports) == 0 {
-		return newTypes
-	}
-
-	importDecl := &ast.GenDecl{
-		Tok:   token.IMPORT,
-		Specs: imports,
-	}
-
-	return append([]*ast.GenDecl{importDecl}, newTypes...)
+	return newTypes
 }

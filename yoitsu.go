@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 type Yoitsu interface {
@@ -99,12 +100,46 @@ func (y *yoitsu) Generate() error {
 		decls = append(decls, sd)
 	}
 
+	imports := y.imports(gType)
+	if imports != nil {
+		decls = append([]ast.Decl{imports}, decls...)
+	}
+
 	y.file = &ast.File{
 		Name:  ast.NewIdent(y.packageName),
 		Decls: decls,
 	}
 
 	return nil
+}
+
+func (y *yoitsu) imports(gType GeneratedType) ast.Decl {
+	var imports []ast.Spec
+	var addedImports []string
+
+	for _, s := range gType.Imports() {
+		if slices.Contains(addedImports, s) {
+			continue
+		}
+
+		imports = append(imports, &ast.ImportSpec{
+			Path: &ast.BasicLit{
+				Kind:  token.STRING,
+				Value: fmt.Sprintf("\"%s\"", s),
+			},
+		})
+
+		addedImports = append(addedImports, s)
+	}
+
+	if len(imports) == 0 {
+		return nil
+	}
+
+	return &ast.GenDecl{
+		Tok:   token.IMPORT,
+		Specs: imports,
+	}
 }
 
 func (y *yoitsu) WriteToDisk(dir string) error {
