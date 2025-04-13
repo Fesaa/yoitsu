@@ -80,10 +80,16 @@ func (y *yoitsu) Generate() error {
 		gType, err = ParseType(y.src.Name(), root.(JsonMap), uni)
 	case []interface{}:
 		gType, err = ParseTypes(y.src.Name(), root.([]interface{}), uni)
+	default:
+		gType, err = parse(y.src.Name(), root, uni)
 	}
 
 	if err != nil {
 		return err
+	}
+
+	if gType == nil {
+		return ErrorNoData
 	}
 
 	structDecl := gType.Representation()

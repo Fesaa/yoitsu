@@ -4,16 +4,17 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"slices"
 )
 
 func ParseTypes(name string, data []interface{}, universe Universe) (GeneratedType, error) {
-	types := make([]GeneratedType, len(data))
+	types := make([]GeneratedType, 0)
 
 	if len(data) == 0 {
 		return nil, nil
 	}
 
-	for i, v := range data {
+	for _, v := range data {
 		var gType GeneratedType
 		var err error
 
@@ -30,11 +31,15 @@ func ParseTypes(name string, data []interface{}, universe Universe) (GeneratedTy
 			return nil, err
 		}
 
-		types[i] = gType
+		if gType == nil {
+			continue
+		}
+
+		types = append(types, gType)
 	}
 
 	if len(types) == 0 {
-		return &generatedType{}, fmt.Errorf("%s: no types found", name)
+		return &generatedType{}, ErrorNoData
 	}
 
 	gt := types[0]
@@ -264,6 +269,8 @@ func parse(name string, value interface{}, universe Universe) (GeneratedType, er
 			// The array contained no elements, we can't know what is inside it
 			return generatedArray(JsonInterface), nil
 		}
+	case nil:
+		return nil, nil
 	}
 
 	return nil, fmt.Errorf("unknown type found in json %T", value)
@@ -286,6 +293,7 @@ func (gt *generatedType) Representation() []*ast.GenDecl {
 
 	newTypes := []*ast.GenDecl{&structDecl}
 	var imports []ast.Spec
+	var addedImports []string
 
 	for name, g := range gt.types {
 		field := &ast.Field{
@@ -304,12 +312,18 @@ func (gt *generatedType) Representation() []*ast.GenDecl {
 		}
 
 		for _, s := range g.Imports() {
+			if slices.Contains(addedImports, s) {
+				continue
+			}
+
 			imports = append(imports, &ast.ImportSpec{
 				Path: &ast.BasicLit{
 					Kind:  token.STRING,
 					Value: fmt.Sprintf("\"%s\"", s),
 				},
 			})
+
+			addedImports = append(addedImports, s)
 		}
 	}
 
