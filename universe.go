@@ -1,7 +1,5 @@
 package yoitsu
 
-import "slices"
-
 type Universe interface {
 	// FindType returns the passed type is no type is found
 	FindType(GeneratedType) GeneratedType
@@ -34,7 +32,7 @@ type universe struct {
 
 func (u *universe) FindType(generatedType GeneratedType) GeneratedType {
 	for _, t := range u._types {
-		if t.SameType(generatedType) {
+		if t.SameType(generatedType, false) {
 			return t
 		}
 	}
@@ -43,32 +41,4 @@ func (u *universe) FindType(generatedType GeneratedType) GeneratedType {
 
 func (u *universe) AddType(generatedType GeneratedType) {
 	u._types = append(u._types, generatedType)
-}
-
-func WithField(name string, jsonType JsonType) Option[*generatedType] {
-	return func(gt *generatedType) {
-		gt.types[name] = generatedSimpleObject(name, jsonType)
-	}
-}
-
-func WithImport(i string) Option[*generatedType] {
-	return func(gt *generatedType) {
-		if !slices.Contains(gt.imports, i) {
-			gt.imports = append(gt.imports, i)
-		}
-	}
-}
-
-func ExistingTypeWrapper(name string, opts ...Option[*generatedType]) GeneratedType {
-	gt := &generatedType{
-		jsonType: JsonPrimitive{name},
-		imports:  make([]string, 0),
-		types:    make(GeneratedTypeMap),
-	}
-
-	for _, opt := range opts {
-		opt(gt)
-	}
-
-	return gt
 }

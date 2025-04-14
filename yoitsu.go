@@ -30,8 +30,9 @@ type Yoitsu struct {
 
 	accessors Accessors
 
-	root interface{}
-	file *ast.File
+	root   interface{}
+	parser *Parser
+	file   *ast.File
 }
 
 func WithUniverse(universe Universe) Option[*Yoitsu] {
@@ -77,6 +78,7 @@ func New(src Source, opts ...Option[*Yoitsu]) *Yoitsu {
 		yt.universe = EmptyUniverse()
 	}
 
+	yt.parser = NewParser(yt)
 	return yt
 }
 
@@ -102,23 +104,23 @@ func (y *Yoitsu) GenerateFile() (err error) {
 	}
 
 	var (
-		gType       GeneratedType
+		//gType       GeneratedType
 		importSpecs []ast.Spec
 		structDecls []ast.Decl
 
-		accessorImports []ast.Spec
-		accessorDecls   []ast.Decl
+		//accessorImports []ast.Spec
+		//accessorDecls   []ast.Decl
 	)
 
-	gType, importSpecs, structDecls, err = y.generateJsonTypes()
+	_, importSpecs, structDecls, err = y.generateJsonTypes()
 	if err != nil {
 		return
 	}
 
-	accessorDecls, accessorImports, err = y.generateMethodAccessors(gType)
+	/*accessorDecls, accessorImports, err = y.generateMethodAccessors(gType)
 	if err != nil {
 		return
-	}
+	}*/
 
 	var decls []ast.Decl
 	var allImportSpecs []ast.Spec
@@ -127,9 +129,9 @@ func (y *Yoitsu) GenerateFile() (err error) {
 		allImportSpecs = append(allImportSpecs, importSpecs...)
 	}
 
-	if len(accessorImports) > 0 {
+	/*if len(accessorImports) > 0 {
 		allImportSpecs = append(allImportSpecs, accessorImports...)
-	}
+	}*/
 
 	if len(allImportSpecs) > 0 {
 		decls = append(decls, &ast.GenDecl{
@@ -142,9 +144,9 @@ func (y *Yoitsu) GenerateFile() (err error) {
 		decls = append(decls, structDecls...)
 	}
 
-	if len(accessorDecls) > 0 {
+	/*if len(accessorDecls) > 0 {
 		decls = append(decls, accessorDecls...)
-	}
+	}*/
 
 	y.file = &ast.File{
 		Doc: &ast.CommentGroup{
@@ -162,7 +164,7 @@ func (y *Yoitsu) GenerateFile() (err error) {
 }
 
 func (y *Yoitsu) generateJsonTypes() (gType GeneratedType, importSpecs []ast.Spec, structDecls []ast.Decl, err error) {
-	gType, err = y.parseRootType()
+	gType, err = y.parser.ParseRoot(y.src.Name(), y.root)
 	if err != nil {
 		return
 	}
@@ -188,42 +190,6 @@ func (y *Yoitsu) imports(gType GeneratedType) (imports []ast.Spec) {
 		})
 
 		addedImports = append(addedImports, s)
-	}
-
-	return
-}
-
-func (y *Yoitsu) parseRootType() (gType GeneratedType, err error) {
-	if y.root == nil {
-		err = ErrNoData
-		return
-	}
-
-	gType, err = y.parseType(y.src.Name(), y.root)
-	if err != nil {
-		return
-	}
-
-	if gType == nil {
-		err = ErrNoData
-		return
-	}
-
-	return
-}
-
-func (y *Yoitsu) parseType(typeName string, data interface{}) (gType GeneratedType, err error) {
-	switch data.(type) {
-	case JsonMap:
-		if y.metadata.SmartMapMapping {
-			gType, err = ParseTypeSmart(typeName, y.root.(JsonMap), y)
-		} else {
-			gType, err = ParseType(typeName, y.root.(JsonMap), y)
-		}
-	case []interface{}:
-		gType, err = ParseTypes(typeName, y.root.([]interface{}), y)
-	default:
-		gType, err = parse(typeName, y.root, y)
 	}
 
 	return

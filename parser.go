@@ -2,167 +2,122 @@ package yoitsu
 
 import "fmt"
 
-func ParseTypes(name string, data []interface{}, y *Yoitsu) (GeneratedType, error) {
-	types := make([]GeneratedType, 0)
+type (
+	JsonObject = interface{}
+	JsonMap    = map[string]JsonObject
+	JsonArray  = []JsonObject
+)
 
-	if len(data) == 0 {
-		return nil, nil
+type Parser struct {
+	yoitsu *Yoitsu
+}
+
+func NewParser(yoitsu *Yoitsu) *Parser {
+	return &Parser{
+		yoitsu: yoitsu,
+	}
+}
+
+func (p *Parser) ParseRoot(name string, root JsonObject) (GeneratedType, error) {
+	if root == nil {
+		return nil, ErrNoData
 	}
 
-	for _, v := range data {
-		var gType GeneratedType
-		var err error
-
-		switch v.(type) {
-		case JsonMap:
-			gType, err = ParseType(name, v.(JsonMap), y)
-		case []interface{}:
-			gType, err = ParseTypes(name, v.([]interface{}), y)
-		default:
-			gType, err = parse(name, v, y)
-		}
-
-		if err != nil {
-			return nil, err
-		}
-
-		if gType == nil {
-			continue
-		}
-
-		types = append(types, y.universe.FindType(gType))
-	}
-
-	mergedType, err := MergeTypes(types)
+	gType, err := p.Parse(name, root)
 	if err != nil {
 		return nil, err
 	}
 
-	return &generatedArrayType{*mergedType.(*generatedType)}, nil
-}
-
-func ParseType(name string, data JsonMap, y *Yoitsu) (GeneratedType, error) {
-	gt := generatedType{
-		jsonType: JsonObject{name},
-		types:    make(GeneratedTypeMap),
-	}
-
-	if err := gt.parse(data, y); err != nil {
-		return &generatedType{}, err
-	}
-	gt.name = name
-	return &gt, nil
-}
-
-func ParseTypeSmart(name string, data JsonMap, y *Yoitsu) (GeneratedType, error) {
-	gt, err := ParseType(name, data, y)
+	gType, err = gType.Cleanup()
 	if err != nil {
-		return &generatedType{}, err
+		return nil, err
 	}
 
-	gType := gt.(*generatedType)
-
-	// All types must be the same
-	var (
-		t     GeneratedType
-		cmpl  = true
-		types []GeneratedType
-	)
-
-	for _, field := range gType.types {
-		if t == nil {
-			t = field
-		}
-
-		if !t.SameType(field) {
-			return gt, err
-		}
-
-		cmpl = cmpl && field.IsComplexObject()
-		types = append(types, field)
-	}
-
-	mergedGType, err := MergeTypes(types)
-	if err != nil {
-		return &generatedType{}, err
-	}
-
-	mergedType := *mergedGType.(*generatedType)
-	// Update name
-	mergedType.jsonType = JsonObject{name}
-	mergedType.SetName(name)
-
-	// Update root
-	newRoot := make([]interface{}, len(data))
-	for _, v := range data {
-		newRoot = append(newRoot, v)
-	}
-	y.root = newRoot
-
-	return &generatedMapType{mergedType}, nil
+	return gType, nil
 }
 
-func MergeTypes(types []GeneratedType) (GeneratedType, error) {
-	if len(types) == 0 {
-		return &generatedType{}, ErrNoData
-	}
-
-	gt := types[0]
-	for _, t := range types[1:] {
-		if err := gt.Merge(t); err != nil {
-			return &generatedType{}, err
-		}
-	}
-
-	return gt, nil
-}
-
-func (gt *generatedType) parse(data JsonMap, y *Yoitsu) error {
-	for name, value := range data {
-		gType, err := parse(gt.JsonType().TypeName()+name, value, y)
-		if err != nil {
-			return err
-		}
-
-		gType.SetName(name)
-		gt.types[name] = gType
-	}
-
-	return nil
-}
-
-func parse(name string, value interface{}, y *Yoitsu) (GeneratedType, error) {
-	switch value.(type) {
-	case string:
-		return generatedSimpleObject(name, JsonString), nil
-	case float64:
-		return generatedSimpleObject(name, JsonFloat64), nil
-	case bool:
-		return generatedSimpleObject(name, JsonBool), nil
+func (p *Parser) Parse(name string, s JsonObject) (GeneratedType, error) {
+	switch s.(type) {
+	case JsonArray:
+		return p.ParseArray(name, s.(JsonArray))
 	case JsonMap:
-		objectType, err := ParseType(name, value.(JsonMap), y)
-		if err != nil {
-			return nil, err
-		}
-
-		return y.universe.FindType(objectType), nil
-	case []interface{}:
-		arrayType, err := ParseTypes(name, value.([]interface{}), y)
-		if err != nil {
-			return nil, err
-		}
-		if arrayType != nil {
-			at := arrayType.(*generatedArrayType)
-			overWrite := y.universe.FindType(&at.generatedType)
-
-			return &generatedArrayType{*overWrite.(*generatedType)}, nil
-		} else {
-			// The array contained no elements, we can't know what is inside it
-			return generatedArray(name, JsonInterface), nil
-		}
+		return p.ParseObject(name, s.(JsonMap))
+	case JsonObject:
+		return p.ParseNative(s.(JsonObject))
 	case nil:
-		return nil, nil
+		return InterfaceType, nil
 	}
 
-	return nil, fmt.Errorf("unknown type found in json %T", value)
+	return nil, fmt.Errorf("%w: can't parse type %T", ErrUnknownType, s)
+}
+
+func (p *Parser) ParseArray(name string, array JsonArray) (GeneratedType, error) {
+	var arrayType GeneratedType
+
+	if len(array) == 0 {
+		return &SliceType{InterfaceType}, nil
+	}
+
+	for _, v := range array {
+		gType, err := p.Parse(SliceNameFormatter(name), v)
+		if err != nil {
+			return nil, err
+		}
+
+		if arrayType == nil {
+			arrayType = gType
+			continue
+		}
+
+		arrayType, err = arrayType.Merge(gType)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &SliceType{p.yoitsu.universe.FindType(arrayType)}, nil
+}
+
+func (p *Parser) ParseObject(name string, obj JsonMap) (GeneratedType, error) {
+	if len(obj) == 0 {
+		return nil, ErrNoData
+	}
+
+	st := StructType{
+		Name:   toSafeGoName(name),
+		Fields: make(map[string]*StructField),
+	}
+
+	for jsonName, jsonObject := range obj {
+		gType, err := p.Parse(name+jsonName, jsonObject)
+		if err != nil {
+			return nil, err
+		}
+
+		if stGType, ok := gType.(*StructType); ok {
+			stGType.tag = jsonName
+		}
+
+		st.Fields[jsonName] = &StructField{
+			Type: gType,
+			Tag:  jsonName,
+		}
+	}
+
+	return p.yoitsu.universe.FindType(&st), nil
+}
+
+func (p *Parser) ParseNative(obj JsonObject) (GeneratedType, error) {
+	switch obj.(type) {
+	case float64:
+		return Float64Type, nil
+	case string:
+		return StringType, nil
+	case bool:
+		return BoolType, nil
+	case nil:
+		return InterfaceType, nil
+	}
+
+	return nil, fmt.Errorf("%w: can't parse type %T", ErrUnknownType, obj)
 }
