@@ -64,7 +64,7 @@ func (y *yoitsu) generateMethodAccessors(gType *generatedType) (decls []ast.Decl
 		importSpec []ast.Spec
 	)
 
-	decl, importSpec = y.src.LoadMethod(structName)
+	decl, importSpec = y.loadMethod(structName)
 	decls = append(decls, decl)
 	importSpecs = append(importSpecs, importSpec...)
 
@@ -83,6 +83,50 @@ func (y *yoitsu) generateMethodAccessors(gType *generatedType) (decls []ast.Decl
 	}
 
 	return
+}
+
+func (y *yoitsu) loadMethod(structName string) (ast.Decl, []ast.Spec) {
+	receiver := &ast.FieldList{
+		List: []*ast.Field{
+			{
+				Names: []*ast.Ident{ast.NewIdent(tokenReceiver)},
+				Type:  ast.NewIdent(tokenPointer + structName),
+			},
+		},
+	}
+
+	funcName := ast.NewIdent(tokenMethodLoadName)
+	funcType := &ast.FuncType{
+		Params: &ast.FieldList{},
+		Results: &ast.FieldList{
+			List: []*ast.Field{
+				{
+					Type: ast.NewIdent(tokenError),
+				},
+			},
+		},
+	}
+
+	funcBody, importSpec := y.src.LoadMethod()
+
+	doc := fmt.Sprintf("\n// %s retrieves the data.", tokenMethodLoadName)
+	if y.accessors.ById {
+		doc += fmt.Sprintf(" Must be called before %s.%s", structName, tokenMethodGroupData)
+	}
+
+	return &ast.FuncDecl{
+		Doc: &ast.CommentGroup{
+			List: []*ast.Comment{
+				{
+					Text: doc,
+				},
+			},
+		},
+		Recv: receiver,
+		Name: funcName,
+		Type: funcType,
+		Body: funcBody,
+	}, importSpec
 }
 
 func (y *yoitsu) allMethod(gType GeneratedType) ast.Decl {
@@ -124,6 +168,13 @@ func (y *yoitsu) allMethod(gType GeneratedType) ast.Decl {
 	}
 
 	return &ast.FuncDecl{
+		Doc: &ast.CommentGroup{
+			List: []*ast.Comment{
+				{
+					Text: fmt.Sprintf("\n// %s returns the raw data.", tokenAllMethod),
+				},
+			},
+		},
 		Recv: receiver,
 		Name: funcName,
 		Type: funcType,
@@ -211,6 +262,13 @@ func (y *yoitsu) groupByMethod(gType *generatedType, ujps []GeneratedType) ast.D
 	}
 
 	return &ast.FuncDecl{
+		Doc: &ast.CommentGroup{
+			List: []*ast.Comment{
+				{
+					Text: fmt.Sprintf("\n// %s groups the data by their unique ids.\n// Can be called manually in conjunction with %s.%s to preload everything", tokenMethodGroupData, structName, tokenMethodLoadName),
+				},
+			},
+		},
 		Recv: receiver,
 		Name: ast.NewIdent(tokenMethodGroupData),
 		Type: &ast.FuncType{
@@ -225,7 +283,7 @@ func (y *yoitsu) uniqueJsonPrimitivesAccessor(gType *generatedType, ujp Generate
 	safeName := toSafeGoName(gType.JsonType().TypeName())
 	structName := safeName + tokenAccessor
 	structField := ast.NewIdent(tokenData + toSafeGoName(ujp.Name()))
-	funcName := fmt.Sprintf("Get%sBy%s", safeName, toSafeGoName(ujp.Name()))
+	funcName := fmt.Sprintf("By%s", toSafeGoName(ujp.Name()))
 
 	receiver := &ast.FieldList{
 		List: []*ast.Field{

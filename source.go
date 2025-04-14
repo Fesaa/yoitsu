@@ -14,7 +14,7 @@ import (
 type Source interface {
 	Json() ([]byte, error)
 	Name() string
-	LoadMethod(structName string) (decl ast.Decl, importSpec []ast.Spec)
+	LoadMethod() (stmt *ast.BlockStmt, importSpec []ast.Spec)
 }
 
 func NewFileSource(name string, f string) Source {
@@ -72,81 +72,53 @@ func (src *fileSource) Name() string {
 	return src.name
 }
 
-func (src *fileSource) LoadMethod(structName string) (decl ast.Decl, importSpec []ast.Spec) {
-	receiver := &ast.FieldList{
-		List: []*ast.Field{
-			{
-				Names: []*ast.Ident{ast.NewIdent(tokenReceiver)},
-				Type:  ast.NewIdent(tokenPointer + structName),
-			},
-		},
-	}
-
-	funcName := ast.NewIdent(tokenMethodLoadName)
-	funcType := &ast.FuncType{
-		Params: &ast.FieldList{},
-		Results: &ast.FieldList{
-			List: []*ast.Field{
-				{
-					Type: ast.NewIdent(tokenError),
-				},
-			},
-		},
-	}
-
-	funcBody := &ast.BlockStmt{
-		List: []ast.Stmt{
-			&ast.AssignStmt{
-				Lhs: []ast.Expr{
-					ast.NewIdent("f"),
-					ast.NewIdent("err"),
-				},
-				Tok: token.DEFINE,
-				Rhs: []ast.Expr{
-					&ast.CallExpr{
-						Fun: &ast.SelectorExpr{
-							X:   ast.NewIdent("os"),
-							Sel: ast.NewIdent("Open"),
-						},
-						Args: []ast.Expr{
-							&ast.BasicLit{
-								Kind:  token.STRING,
-								Value: fmt.Sprintf(`"%s"`, src.f),
+func (src *fileSource) LoadMethod() (*ast.BlockStmt, []ast.Spec) {
+	return &ast.BlockStmt{
+			List: []ast.Stmt{
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{
+						ast.NewIdent("f"),
+						ast.NewIdent("err"),
+					},
+					Tok: token.DEFINE,
+					Rhs: []ast.Expr{
+						&ast.CallExpr{
+							Fun: &ast.SelectorExpr{
+								X:   ast.NewIdent("os"),
+								Sel: ast.NewIdent("Open"),
+							},
+							Args: []ast.Expr{
+								&ast.BasicLit{
+									Kind:  token.STRING,
+									Value: fmt.Sprintf(`"%s"`, src.f),
+								},
 							},
 						},
 					},
 				},
-			},
-			ifErrNotNilStmt(),
-			deferStmt("f", "Close"),
-			&ast.AssignStmt{
-				Lhs: []ast.Expr{
-					ast.NewIdent("data"),
-					ast.NewIdent("err"),
-				},
-				Tok: token.DEFINE,
-				Rhs: []ast.Expr{
-					&ast.CallExpr{
-						Fun: &ast.SelectorExpr{
-							X:   ast.NewIdent("io"),
-							Sel: ast.NewIdent("ReadAll"),
-						},
-						Args: []ast.Expr{
-							ast.NewIdent("f"),
+				ifErrNotNilStmt(),
+				deferStmt("f", "Close"),
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{
+						ast.NewIdent("data"),
+						ast.NewIdent("err"),
+					},
+					Tok: token.DEFINE,
+					Rhs: []ast.Expr{
+						&ast.CallExpr{
+							Fun: &ast.SelectorExpr{
+								X:   ast.NewIdent("io"),
+								Sel: ast.NewIdent("ReadAll"),
+							},
+							Args: []ast.Expr{
+								ast.NewIdent("f"),
+							},
 						},
 					},
 				},
+				ifErrNotNilStmt(),
+				unmarshallStmt(tokenReceiver, tokenData),
 			},
-			ifErrNotNilStmt(),
-			unmarshallStmt(tokenReceiver, tokenData),
-		},
-	}
-
-	return &ast.FuncDecl{
-			Recv: receiver,
-			Name: funcName,
-			Type: funcType,
-			Body: funcBody,
 		}, []ast.Spec{
 			&ast.ImportSpec{
 				Path: &ast.BasicLit{
@@ -205,81 +177,53 @@ func (src *urlSource) Name() string {
 	return src.name
 }
 
-func (src *urlSource) LoadMethod(structName string) (decl ast.Decl, importSpec []ast.Spec) {
-	receiver := &ast.FieldList{
-		List: []*ast.Field{
-			{
-				Names: []*ast.Ident{ast.NewIdent(tokenReceiver)},
-				Type:  ast.NewIdent(tokenPointer + structName),
-			},
-		},
-	}
-
-	funcName := ast.NewIdent(tokenMethodLoadName)
-	funcType := &ast.FuncType{
-		Params: &ast.FieldList{},
-		Results: &ast.FieldList{
-			List: []*ast.Field{
-				{
-					Type: ast.NewIdent(tokenError),
-				},
-			},
-		},
-	}
-
-	funcBody := &ast.BlockStmt{
-		List: []ast.Stmt{
-			&ast.AssignStmt{
-				Lhs: []ast.Expr{
-					ast.NewIdent("res"),
-					ast.NewIdent("err"),
-				},
-				Tok: token.DEFINE,
-				Rhs: []ast.Expr{
-					&ast.CallExpr{
-						Fun: &ast.SelectorExpr{
-							X:   ast.NewIdent("http"),
-							Sel: ast.NewIdent("Get"),
-						},
-						Args: []ast.Expr{
-							&ast.BasicLit{
-								Kind:  token.STRING,
-								Value: fmt.Sprintf(`"%s"`, src.url),
+func (src *urlSource) LoadMethod() (*ast.BlockStmt, []ast.Spec) {
+	return &ast.BlockStmt{
+			List: []ast.Stmt{
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{
+						ast.NewIdent("res"),
+						ast.NewIdent("err"),
+					},
+					Tok: token.DEFINE,
+					Rhs: []ast.Expr{
+						&ast.CallExpr{
+							Fun: &ast.SelectorExpr{
+								X:   ast.NewIdent("http"),
+								Sel: ast.NewIdent("Get"),
+							},
+							Args: []ast.Expr{
+								&ast.BasicLit{
+									Kind:  token.STRING,
+									Value: fmt.Sprintf(`"%s"`, src.url),
+								},
 							},
 						},
 					},
 				},
-			},
-			ifErrNotNilStmt(),
-			deferStmt("res.Body", "Close"),
-			&ast.AssignStmt{
-				Lhs: []ast.Expr{
-					ast.NewIdent("data"),
-					ast.NewIdent("err"),
-				},
-				Tok: token.DEFINE,
-				Rhs: []ast.Expr{
-					&ast.CallExpr{
-						Fun: &ast.SelectorExpr{
-							X:   ast.NewIdent("io"),
-							Sel: ast.NewIdent("ReadAll"),
-						},
-						Args: []ast.Expr{
-							ast.NewIdent("res.Body"),
+				ifErrNotNilStmt(),
+				deferStmt("res.Body", "Close"),
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{
+						ast.NewIdent("data"),
+						ast.NewIdent("err"),
+					},
+					Tok: token.DEFINE,
+					Rhs: []ast.Expr{
+						&ast.CallExpr{
+							Fun: &ast.SelectorExpr{
+								X:   ast.NewIdent("io"),
+								Sel: ast.NewIdent("ReadAll"),
+							},
+							Args: []ast.Expr{
+								ast.NewIdent("res.Body"),
+							},
 						},
 					},
 				},
+				ifErrNotNilStmt(),
+				unmarshallStmt(tokenReceiver, tokenData),
 			},
-			ifErrNotNilStmt(),
-			unmarshallStmt(tokenReceiver, tokenData),
-		},
-	}
-
-	return &ast.FuncDecl{
-			Recv: receiver,
-			Name: funcName,
-			Type: funcType,
-			Body: funcBody,
 		}, []ast.Spec{
 			&ast.ImportSpec{
 				Path: &ast.BasicLit{
