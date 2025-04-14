@@ -8,62 +8,19 @@ import (
 	"unicode"
 )
 
-func ParseTypes(name string, data []interface{}, universe Universe) (GeneratedType, error) {
-	types := make([]GeneratedType, 0)
-
-	if len(data) == 0 {
-		return nil, nil
-	}
-
-	for _, v := range data {
-		var gType GeneratedType
-		var err error
-
-		switch v.(type) {
-		case JsonMap:
-			gType, err = ParseType(name, v.(JsonMap), universe)
-		case []interface{}:
-			gType, err = ParseTypes(name, v.([]interface{}), universe)
-		default:
-			gType, err = parse(name, v, universe)
-		}
-
-		if err != nil {
-			return nil, err
-		}
-
-		if gType == nil {
-			continue
-		}
-
-		types = append(types, universe.FindType(gType))
-	}
-
-	if len(types) == 0 {
-		return &generatedType{}, ErrNoData
-	}
-
-	gt := types[0]
-	for _, t := range types[1:] {
-		if err := gt.Merge(t); err != nil {
-			return &generatedType{}, err
-		}
-	}
-
-	return gt, nil
-}
-
-func ParseType(name string, data JsonMap, universe Universe) (GeneratedType, error) {
-	gt := generatedType{
-		jsonType: JsonObject{JsonPrimitive{name}},
-		types:    make(GeneratedTypeMap),
-	}
-
-	if err := gt.parse(data, universe); err != nil {
-		return &generatedType{}, err
-	}
-	gt.name = name
-	return &gt, nil
+type GeneratedType interface {
+	Name() string
+	SetName(string)
+	// SameType returns true if all fields are of the same type, their names do not need to match
+	// And their union contains the same elements as each subset on her own
+	SameType(other GeneratedType) bool
+	JsonType() JsonType
+	Imports() []string
+	// SameJsonType return true if the underlying JsonType is the same. This is a simple name check
+	SameJsonType(other GeneratedType) bool
+	IsComplexObject() bool
+	Merge(other GeneratedType) error
+	Representation() []ast.Decl
 }
 
 func generatedSimpleObject(name string, t JsonType) GeneratedType {
@@ -82,19 +39,47 @@ func generatedArray(name string, t JsonType) GeneratedType {
 	}
 }
 
-type GeneratedType interface {
-	Name() string
-	SetName(string)
-	// SameType returns true if all fields are of the same type, their names do not need to match
-	// And their union contains the same elements as each subset on her own
-	SameType(other GeneratedType) bool
-	JsonType() JsonType
-	Imports() []string
-	// SameJsonType return true if the underlying JsonType is the same. This is a simple name check
-	SameJsonType(other GeneratedType) bool
-	IsComplexObject() bool
-	Merge(other GeneratedType) error
-	Representation() []ast.Decl
+type generatedMapType struct {
+	generatedType
+}
+
+func (gt *generatedMapType) JsonType() JsonType {
+	return JsonMapType{
+		gt.jsonType,
+	}
+}
+
+func (gt *generatedArrayType) generatedMapType(o GeneratedType) bool {
+	return gt.JsonType().TypeName() == o.JsonType().TypeName()
+}
+
+func (gt *generatedMapType) SameType(o GeneratedType) bool {
+	if !gt.SameJsonType(o) {
+		return false
+	}
+
+	// JsonType is the same so must be an array
+	other := o.(*generatedMapType)
+	return gt.generatedType.SameType(&other.generatedType)
+}
+
+func (gt *generatedMapType) Merge(o GeneratedType) error {
+	other, ok := o.(*generatedMapType)
+	if !ok {
+		return ErrCantMergeDifferentTypes
+	}
+
+	// Overwrite generic types, or ignore them
+	if gt.jsonType.TypeName() == JsonInterface.TypeName() {
+		gt.generatedType = other.generatedType
+		return nil
+	}
+
+	if other.JsonType().TypeName() == JsonInterface.TypeName() {
+		return nil
+	}
+
+	return gt.generatedType.Merge(&other.generatedType)
 }
 
 type generatedArrayType struct {
@@ -107,8 +92,13 @@ func (gt *generatedArrayType) JsonType() JsonType {
 	}
 }
 
+func (gt *generatedArrayType) SameJsonType(o GeneratedType) bool {
+	return gt.JsonType().TypeName() == o.JsonType().TypeName()
+}
+
 func (gt *generatedArrayType) SameType(o GeneratedType) bool {
 	if !gt.SameJsonType(o) {
+		gt.SameJsonType(o)
 		return false
 	}
 
@@ -146,7 +136,7 @@ type generatedType struct {
 }
 
 func (gt *generatedType) Name() string {
-	return gt.name
+	return toSafeGoName(gt.name)
 }
 
 func (gt *generatedType) SetName(name string) {
@@ -185,7 +175,7 @@ func (gt *generatedType) SameJsonType(other GeneratedType) bool {
 	if other.JsonType().TypeName() == JsonInterface.TypeName() {
 		return true
 	}
-	return gt.jsonType.TypeName() == other.JsonType().TypeName()
+	return gt.JsonType().TypeName() == other.JsonType().TypeName()
 }
 
 func (gt *generatedType) JsonType() JsonType {
@@ -208,7 +198,8 @@ func (gt *generatedType) Imports() []string {
 func (gt *generatedType) IsComplexObject() bool {
 	_, object := gt.jsonType.(JsonObject)
 	_, array := gt.jsonType.(JsonArray)
-	return object || array
+	_, jsonMap := gt.jsonType.(JsonMapType)
+	return object || array || jsonMap
 }
 
 func (gt *generatedType) Merge(o GeneratedType) error {
@@ -236,53 +227,6 @@ func (gt *generatedType) Merge(o GeneratedType) error {
 	}
 
 	return nil
-}
-
-func (gt *generatedType) parse(data JsonMap, universe Universe) error {
-	for name, value := range data {
-		gType, err := parse(gt.JsonType().TypeName()+name, value, universe)
-		if err != nil {
-			return err
-		}
-
-		gType.SetName(name)
-		gt.types[name] = gType
-	}
-
-	return nil
-}
-
-func parse(name string, value interface{}, universe Universe) (GeneratedType, error) {
-	switch value.(type) {
-	case string:
-		return generatedSimpleObject(name, JsonString), nil
-	case float64:
-		return generatedSimpleObject(name, JsonFloat64), nil
-	case bool:
-		return generatedSimpleObject(name, JsonBool), nil
-	case JsonMap:
-		objectType, err := ParseType(name, value.(JsonMap), universe)
-		if err != nil {
-			return nil, err
-		}
-		return universe.FindType(objectType), nil
-	case []interface{}:
-		arrayType, err := ParseTypes(name, value.([]interface{}), universe)
-		if err != nil {
-			return nil, err
-		}
-		if arrayType != nil {
-			arrayType = universe.FindType(arrayType)
-			return &generatedArrayType{*arrayType.(*generatedType)}, nil
-		} else {
-			// The array contained no elements, we can't know what is inside it
-			return generatedArray(name, JsonInterface), nil
-		}
-	case nil:
-		return nil, nil
-	}
-
-	return nil, fmt.Errorf("unknown type found in json %T", value)
 }
 
 func toSafeGoName(name string) string {

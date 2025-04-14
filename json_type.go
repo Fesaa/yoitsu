@@ -9,11 +9,19 @@ type JsonType interface {
 }
 
 type JsonObject struct {
-	inner JsonPrimitive
+	_type string
 }
 
 func (j JsonObject) TypeName() string {
-	return j.inner.TypeName()
+	return toSafeGoName(j._type)
+}
+
+type JsonMapType struct {
+	value JsonType
+}
+
+func (m JsonMapType) TypeName() string {
+	return fmt.Sprintf("map[string]%s", m.value.TypeName())
 }
 
 type JsonArray struct {
