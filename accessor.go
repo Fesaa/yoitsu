@@ -37,7 +37,8 @@ func (y *yoitsu) generateMethodAccessors(gType *generatedType) (decls []ast.Decl
 	}
 
 	fieldList := ast.FieldList{}
-	structName := gType.JsonType().TypeName() + tokenAccessor
+	safeName := toSafeGoName(gType.JsonType().TypeName())
+	structName := safeName + tokenAccessor
 
 	accessorsStruct := &ast.GenDecl{
 		Tok: token.TYPE,
@@ -53,7 +54,7 @@ func (y *yoitsu) generateMethodAccessors(gType *generatedType) (decls []ast.Decl
 
 	fieldList.List = append(fieldList.List, &ast.Field{
 		Names: []*ast.Ident{ast.NewIdent(tokenData)},
-		Type:  ast.NewIdent(tokenArray + gType.JsonType().TypeName()),
+		Type:  ast.NewIdent(tokenArray + safeName),
 	})
 
 	decls = append(decls, accessorsStruct)
@@ -85,7 +86,8 @@ func (y *yoitsu) generateMethodAccessors(gType *generatedType) (decls []ast.Decl
 }
 
 func (y *yoitsu) allMethod(gType GeneratedType) ast.Decl {
-	structName := gType.JsonType().TypeName() + tokenAccessor
+	safeName := toSafeGoName(gType.JsonType().TypeName())
+	structName := safeName + tokenAccessor
 
 	receiver := &ast.FieldList{
 		List: []*ast.Field{
@@ -102,7 +104,7 @@ func (y *yoitsu) allMethod(gType GeneratedType) ast.Decl {
 		Results: &ast.FieldList{
 			List: []*ast.Field{
 				{
-					Type: ast.NewIdent(tokenArray + gType.JsonType().TypeName()),
+					Type: ast.NewIdent(tokenArray + safeName),
 				},
 			},
 		},
@@ -157,7 +159,8 @@ func (y *yoitsu) uniqueGetters(gType *generatedType, fieldList *ast.FieldList) (
 }
 
 func (y *yoitsu) groupByMethod(gType *generatedType, ujps []GeneratedType) ast.Decl {
-	structName := gType.JsonType().TypeName() + tokenAccessor
+	safeName := toSafeGoName(gType.JsonType().TypeName())
+	structName := safeName + tokenAccessor
 
 	receiver := &ast.FieldList{
 		List: []*ast.Field{
@@ -219,9 +222,10 @@ func (y *yoitsu) groupByMethod(gType *generatedType, ujps []GeneratedType) ast.D
 }
 
 func (y *yoitsu) uniqueJsonPrimitivesAccessor(gType *generatedType, ujp GeneratedType) ast.Decl {
-	structName := gType.JsonType().TypeName() + tokenAccessor
+	safeName := toSafeGoName(gType.JsonType().TypeName())
+	structName := safeName + tokenAccessor
 	structField := ast.NewIdent(tokenData + toSafeGoName(ujp.Name()))
-	funcName := fmt.Sprintf("Get%sBy%s", gType.JsonType().TypeName(), toSafeGoName(ujp.Name()))
+	funcName := fmt.Sprintf("Get%sBy%s", safeName, toSafeGoName(ujp.Name()))
 
 	receiver := &ast.FieldList{
 		List: []*ast.Field{
