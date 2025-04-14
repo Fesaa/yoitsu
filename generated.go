@@ -12,6 +12,8 @@ type GeneratedType interface {
 	Merge(other GeneratedType) (GeneratedType, error)
 
 	Type() string
+	// UnderLyingType may return the type itself, if there is no underlying type
+	UnderLyingType() GeneratedType
 	// SameType may modify the struct if forgiving is true to force equivalence if possible
 	// See specific implementations for details
 	SameType(other GeneratedType, forgiving bool) bool

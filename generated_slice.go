@@ -18,6 +18,10 @@ func (s *SliceType) Copy() GeneratedType {
 	}
 }
 
+func (s *SliceType) UnderLyingType() GeneratedType {
+	return s.SliceType
+}
+
 func (s *SliceType) IsComplexObject() bool {
 	return true
 }

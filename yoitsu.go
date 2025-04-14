@@ -104,23 +104,23 @@ func (y *Yoitsu) GenerateFile() (err error) {
 	}
 
 	var (
-		//gType       GeneratedType
+		gType       GeneratedType
 		importSpecs []ast.Spec
 		structDecls []ast.Decl
 
-		//accessorImports []ast.Spec
-		//accessorDecls   []ast.Decl
+		accessorImports []ast.Spec
+		accessorDecls   []ast.Decl
 	)
 
-	_, importSpecs, structDecls, err = y.generateJsonTypes()
+	gType, importSpecs, structDecls, err = y.generateJsonTypes()
 	if err != nil {
 		return
 	}
 
-	/*accessorDecls, accessorImports, err = y.generateMethodAccessors(gType)
+	accessorDecls, accessorImports, err = y.generateMethodAccessors(gType)
 	if err != nil {
 		return
-	}*/
+	}
 
 	var decls []ast.Decl
 	var allImportSpecs []ast.Spec
@@ -129,9 +129,9 @@ func (y *Yoitsu) GenerateFile() (err error) {
 		allImportSpecs = append(allImportSpecs, importSpecs...)
 	}
 
-	/*if len(accessorImports) > 0 {
+	if len(accessorImports) > 0 {
 		allImportSpecs = append(allImportSpecs, accessorImports...)
-	}*/
+	}
 
 	if len(allImportSpecs) > 0 {
 		decls = append(decls, &ast.GenDecl{
@@ -144,9 +144,9 @@ func (y *Yoitsu) GenerateFile() (err error) {
 		decls = append(decls, structDecls...)
 	}
 
-	/*if len(accessorDecls) > 0 {
+	if len(accessorDecls) > 0 {
 		decls = append(decls, accessorDecls...)
-	}*/
+	}
 
 	y.file = &ast.File{
 		Doc: &ast.CommentGroup{

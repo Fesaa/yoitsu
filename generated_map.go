@@ -15,6 +15,10 @@ func (m *MapType) Copy() GeneratedType {
 	}
 }
 
+func (m *MapType) UnderLyingType() GeneratedType {
+	return m.ValueType
+}
+
 func (m *MapType) IsComplexObject() bool {
 	return true
 }

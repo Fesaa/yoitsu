@@ -25,7 +25,7 @@ const (
 )
 
 func (y *Yoitsu) generateMethodAccessors(gType GeneratedType) (decls []ast.Decl, importSpecs []ast.Spec, err error) {
-	if !y.accessors.Generate {
+	if !y.accessors.Generate || gType.UnderLyingType().SameType(InterfaceType, false) {
 		return
 	}
 
@@ -35,7 +35,7 @@ func (y *Yoitsu) generateMethodAccessors(gType GeneratedType) (decls []ast.Decl,
 		Tok: token.TYPE,
 		Specs: []ast.Spec{
 			&ast.TypeSpec{
-				Name: ast.NewIdent(gType.Name() + tokenAccessor),
+				Name: ast.NewIdent(gType.UnderLyingType().Type() + tokenAccessor),
 				Type: &ast.StructType{
 					Fields: &fieldList,
 				},
@@ -45,7 +45,7 @@ func (y *Yoitsu) generateMethodAccessors(gType GeneratedType) (decls []ast.Decl,
 
 	fieldList.List = append(fieldList.List, &ast.Field{
 		Names: []*ast.Ident{ast.NewIdent(tokenData)},
-		Type:  ast.NewIdent(gType.JsonType().TypeName()),
+		Type:  ast.NewIdent(gType.Type()),
 	})
 
 	decls = append(decls, accessorsStruct)
@@ -55,17 +55,17 @@ func (y *Yoitsu) generateMethodAccessors(gType GeneratedType) (decls []ast.Decl,
 		importSpec []ast.Spec
 	)
 
-	decl, importSpec = y.loadMethod(gType.Name())
+	decl, importSpec = y.loadMethod(gType.UnderLyingType().Type())
 	decls = append(decls, decl)
 	importSpecs = append(importSpecs, importSpec...)
 
 	decls = append(decls, y.allMethod(gType))
 
 	if y.accessors.ById {
-		gat, ok := gType.(*generatedArrayType)
+		gat, ok := gType.UnderLyingType().(*StructType)
 		if ok {
 			var uniqueDecls []ast.Decl
-			uniqueDecls, importSpec = y.uniqueGetters(&gat.generatedType, &fieldList)
+			uniqueDecls, importSpec = y.uniqueGetters(*gat, &fieldList)
 
 			if len(uniqueDecls) > 0 {
 				decls = append(decls, uniqueDecls...)
@@ -75,9 +75,9 @@ func (y *Yoitsu) generateMethodAccessors(gType GeneratedType) (decls []ast.Decl,
 			}
 		}
 
-		gmt, ok := gType.(*generatedMapType)
+		gmt, ok := gType.UnderLyingType().(*MapType)
 		if ok {
-			decls = append(decls, y.getByIdMethod(gmt.generatedType))
+			decls = append(decls, y.getByIdMethod(gmt.ValueType))
 		}
 
 	}
@@ -85,14 +85,14 @@ func (y *Yoitsu) generateMethodAccessors(gType GeneratedType) (decls []ast.Decl,
 	return
 }
 
-func (y *Yoitsu) getByIdMethod(gType generatedType) ast.Decl {
+func (y *Yoitsu) getByIdMethod(gType GeneratedType) ast.Decl {
 	funcName := "ByID"
 
 	receiver := &ast.FieldList{
 		List: []*ast.Field{
 			{
 				Names: []*ast.Ident{ast.NewIdent(tokenReceiver)},
-				Type:  ast.NewIdent(tokenPointer + gType.Name() + tokenAccessor),
+				Type:  ast.NewIdent(tokenPointer + gType.Type() + tokenAccessor),
 			},
 		},
 	}
@@ -109,7 +109,7 @@ func (y *Yoitsu) getByIdMethod(gType generatedType) ast.Decl {
 		Results: &ast.FieldList{
 			List: []*ast.Field{
 				{
-					Type: ast.NewIdent(gType.JsonType().TypeName()),
+					Type: ast.NewIdent(gType.Type()),
 				},
 			},
 		},
@@ -119,7 +119,7 @@ func (y *Yoitsu) getByIdMethod(gType generatedType) ast.Decl {
 		Doc: &ast.CommentGroup{
 			List: []*ast.Comment{
 				{
-					Text: fmt.Sprintf("\n// ByID returns the %s identified by the passed id", gType.JsonType().TypeName()),
+					Text: fmt.Sprintf("\n// ByID returns the %s identified by the passed id", gType.Type()),
 				},
 			},
 		},
@@ -193,7 +193,7 @@ func (y *Yoitsu) allMethod(gType GeneratedType) ast.Decl {
 		List: []*ast.Field{
 			{
 				Names: []*ast.Ident{ast.NewIdent(tokenReceiver)},
-				Type:  ast.NewIdent(tokenPointer + gType.Name() + tokenAccessor),
+				Type:  ast.NewIdent(tokenPointer + gType.UnderLyingType().Type() + tokenAccessor),
 			},
 		},
 	}
@@ -204,7 +204,7 @@ func (y *Yoitsu) allMethod(gType GeneratedType) ast.Decl {
 		Results: &ast.FieldList{
 			List: []*ast.Field{
 				{
-					Type: ast.NewIdent(gType.JsonType().TypeName()),
+					Type: ast.NewIdent(gType.Type()),
 				},
 			},
 		},
@@ -238,7 +238,7 @@ func (y *Yoitsu) allMethod(gType GeneratedType) ast.Decl {
 	}
 }
 
-func (y *Yoitsu) uniqueGetters(gType *generatedType, fieldList *ast.FieldList) (decls []ast.Decl, importSpec []ast.Spec) {
+func (y *Yoitsu) uniqueGetters(gType StructType, fieldList *ast.FieldList) (decls []ast.Decl, importSpec []ast.Spec) {
 	unqiueJsonPrimitives := y.uniqueJsonPrimitives(gType)
 
 	if len(unqiueJsonPrimitives) == 0 {
@@ -254,8 +254,8 @@ func (y *Yoitsu) uniqueGetters(gType *generatedType, fieldList *ast.FieldList) (
 		}
 
 		fieldList.List = append(fieldList.List, &ast.Field{
-			Names: []*ast.Ident{ast.NewIdent(tokenData + toSafeGoName(ujp.Name()))},
-			Type:  ast.NewIdent(fmt.Sprintf(tokenMap, ujp.JsonType().TypeName(), gType.Name())),
+			Names: []*ast.Ident{ast.NewIdent(tokenData + toSafeGoName(ujp.Tag))},
+			Type:  ast.NewIdent(fmt.Sprintf(tokenMap, ujp.Type.Type(), gType.Type())),
 		})
 
 		decls = append(decls, decl)
@@ -264,12 +264,12 @@ func (y *Yoitsu) uniqueGetters(gType *generatedType, fieldList *ast.FieldList) (
 	return
 }
 
-func (y *Yoitsu) groupByMethod(gType *generatedType, ujps []GeneratedType) ast.Decl {
+func (y *Yoitsu) groupByMethod(gType StructType, ujps []StructField) ast.Decl {
 	receiver := &ast.FieldList{
 		List: []*ast.Field{
 			{
 				Names: []*ast.Ident{ast.NewIdent(tokenReceiver)},
-				Type:  ast.NewIdent(tokenPointer + gType.Name() + tokenAccessor),
+				Type:  ast.NewIdent(tokenPointer + gType.Type() + tokenAccessor),
 			},
 		},
 	}
@@ -281,11 +281,11 @@ func (y *Yoitsu) groupByMethod(gType *generatedType, ujps []GeneratedType) ast.D
 				&ast.IndexExpr{
 					X: &ast.SelectorExpr{
 						X:   ast.NewIdent(tokenReceiver),
-						Sel: ast.NewIdent(tokenData + toSafeGoName(ujp.Name())),
+						Sel: ast.NewIdent(tokenData + toSafeGoName(ujp.Tag)),
 					},
 					Index: &ast.SelectorExpr{
 						X:   ast.NewIdent("d"),
-						Sel: ast.NewIdent(toSafeGoName(ujp.Name())),
+						Sel: ast.NewIdent(toSafeGoName(ujp.Tag)),
 					},
 				},
 			},
@@ -317,7 +317,7 @@ func (y *Yoitsu) groupByMethod(gType *generatedType, ujps []GeneratedType) ast.D
 		Doc: &ast.CommentGroup{
 			List: []*ast.Comment{
 				{
-					Text: fmt.Sprintf("\n// %s groups the data by their unique ids.\n// Can be called manually in conjunction with %s.%s to preload everything", tokenMethodGroupData, gType.Name()+tokenAccessor, tokenMethodLoadName),
+					Text: fmt.Sprintf("\n// %s groups the data by their unique ids.\n// Can be called manually in conjunction with %s.%s to preload everything", tokenMethodGroupData, gType.Type()+tokenAccessor, tokenMethodLoadName),
 				},
 			},
 		},
@@ -331,15 +331,15 @@ func (y *Yoitsu) groupByMethod(gType *generatedType, ujps []GeneratedType) ast.D
 	}
 }
 
-func (y *Yoitsu) uniqueJsonPrimitivesAccessor(gType *generatedType, ujp GeneratedType) ast.Decl {
-	structField := ast.NewIdent(tokenData + ujp.Name())
-	funcName := fmt.Sprintf("By%s", ujp.Name())
+func (y *Yoitsu) uniqueJsonPrimitivesAccessor(gType StructType, ujp StructField) ast.Decl {
+	structField := ast.NewIdent(tokenData + toSafeGoName(ujp.Tag))
+	funcName := fmt.Sprintf("By%s", ujp.Tag)
 
 	receiver := &ast.FieldList{
 		List: []*ast.Field{
 			{
 				Names: []*ast.Ident{ast.NewIdent(tokenReceiver)},
-				Type:  ast.NewIdent(tokenPointer + gType.Name() + tokenAccessor),
+				Type:  ast.NewIdent(tokenPointer + gType.Type() + tokenAccessor),
 			},
 		},
 	}
@@ -349,14 +349,14 @@ func (y *Yoitsu) uniqueJsonPrimitivesAccessor(gType *generatedType, ujp Generate
 			List: []*ast.Field{
 				{
 					Names: []*ast.Ident{ast.NewIdent(tokenIdentifier)},
-					Type:  ast.NewIdent(ujp.JsonType().TypeName()),
+					Type:  ast.NewIdent(ujp.Type.Type()),
 				},
 			},
 		},
 		Results: &ast.FieldList{
 			List: []*ast.Field{
 				{
-					Type: ast.NewIdent(gType.JsonType().TypeName()),
+					Type: ast.NewIdent(gType.Type()),
 				},
 				{
 					Type: ast.NewIdent(tokenError),
@@ -403,7 +403,7 @@ func (y *Yoitsu) uniqueJsonPrimitivesAccessor(gType *generatedType, ujp Generate
 									&ast.ReturnStmt{
 										Results: []ast.Expr{
 											&ast.CompositeLit{
-												Type: ast.NewIdent(gType.JsonType().TypeName()),
+												Type: ast.NewIdent(gType.Type()),
 											},
 											ast.NewIdent("err"),
 										},
@@ -442,7 +442,7 @@ func (y *Yoitsu) uniqueJsonPrimitivesAccessor(gType *generatedType, ujp Generate
 		Doc: &ast.CommentGroup{
 			List: []*ast.Comment{
 				{
-					Text: fmt.Sprintf("\n// %s returns the %s uniquely identified by %s\n//\n// Error is only non-nil if the source errors out", funcName, gType.JsonType().TypeName(), ujp.Name()),
+					Text: fmt.Sprintf("\n// %s returns the %s uniquely identified by %s\n//\n// Error is only non-nil if the source errors out", funcName, gType.Type(), ujp.Tag),
 				},
 			},
 		},
@@ -453,25 +453,25 @@ func (y *Yoitsu) uniqueJsonPrimitivesAccessor(gType *generatedType, ujp Generate
 	}
 }
 
-func (y *Yoitsu) uniqueJsonPrimitives(gType *generatedType) (found []GeneratedType) {
+func (y *Yoitsu) uniqueJsonPrimitives(gType StructType) (found []StructField) {
 	data := y.root.([]interface{})
 
-	for name, field := range gType.types {
-		prim, ok := field.JsonType().(JsonPrimitive)
+	for name, field := range gType.Fields {
+		prim, ok := field.Type.(*nativeType)
 		if !ok {
 			continue
 		}
 
-		switch prim.TypeName() {
-		case JsonFloat64.TypeName():
+		switch prim.Type() {
+		case Float64Type.Type():
 			unique, success := extractUniqueValues[float64](data, name)
 			if success && len(unique) == len(data) {
-				found = append(found, field)
+				found = append(found, *field)
 			}
-		case JsonString.TypeName():
+		case StringType.Type():
 			unique, success := extractUniqueValues[string](data, name)
 			if success && len(unique) == len(data) {
-				found = append(found, field)
+				found = append(found, *field)
 			}
 		}
 	}

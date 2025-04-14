@@ -5,6 +5,11 @@ import (
 	"go/ast"
 	"go/token"
 	"slices"
+	"strconv"
+)
+
+var (
+	ValidIdFunc func(string) bool = defaultValidIdFunc
 )
 
 type StructType struct {
@@ -18,6 +23,10 @@ type StructType struct {
 type StructField struct {
 	Type GeneratedType
 	Tag  string
+}
+
+func (s *StructType) UnderLyingType() GeneratedType {
+	return s
 }
 
 func (s *StructType) Copy() GeneratedType {
@@ -142,9 +151,11 @@ func (s *StructType) Cleanup() (GeneratedType, error) {
 	// If all fields are the same type, convert into map
 	var tracker GeneratedType
 	allComplex := true
+	allIds := true
 
 	for _, field := range s.Fields {
 		allComplex = allComplex && field.Type.IsComplexObject()
+		allIds = allIds && ValidIdFunc(field.Tag)
 
 		if tracker == nil {
 			tracker = field.Type
@@ -154,6 +165,10 @@ func (s *StructType) Cleanup() (GeneratedType, error) {
 		if !tracker.SameType(field.Type, true) {
 			return s, nil
 		}
+	}
+
+	if !allComplex && !allIds {
+		return s, nil
 	}
 
 	if len(s.Fields) < 2 && !allComplex {
@@ -236,4 +251,11 @@ func (s *StructType) Representation() []ast.Decl {
 	}
 
 	return newTypes
+}
+
+func defaultValidIdFunc(s string) bool {
+	if _, err := strconv.Atoi(s); err == nil {
+		return true
+	}
+	return false
 }

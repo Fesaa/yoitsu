@@ -117,7 +117,7 @@ func (src *fileSource) LoadMethod() (*ast.BlockStmt, []ast.Spec) {
 					},
 				},
 				ifErrNotNilStmt(),
-				unmarshallStmt("tokenReceiver", "tokenData"),
+				unmarshallStmt(tokenReceiver, tokenData),
 			},
 		}, []ast.Spec{
 			&ast.ImportSpec{
@@ -222,7 +222,7 @@ func (src *urlSource) LoadMethod() (*ast.BlockStmt, []ast.Spec) {
 					},
 				},
 				ifErrNotNilStmt(),
-				unmarshallStmt("tokenReceiver", "tokenData"),
+				unmarshallStmt(tokenReceiver, tokenData),
 			},
 		}, []ast.Spec{
 			&ast.ImportSpec{
