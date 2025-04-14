@@ -62,20 +62,23 @@ func (y *Yoitsu) generateMethodAccessors(gType GeneratedType) (decls []ast.Decl,
 	decls = append(decls, y.allMethod(gType))
 
 	if y.accessors.ById {
-		gat, ok := gType.UnderLyingType().(*StructType)
+		_, ok := gType.(*StructType)
 		if ok {
-			var uniqueDecls []ast.Decl
-			uniqueDecls, importSpec = y.uniqueGetters(*gat, &fieldList)
+			gat, ok := gType.UnderLyingType().(*StructType)
+			if ok {
+				var uniqueDecls []ast.Decl
+				uniqueDecls, importSpec = y.uniqueGetters(*gat, &fieldList)
 
-			if len(uniqueDecls) > 0 {
-				decls = append(decls, uniqueDecls...)
-			}
-			if len(importSpec) > 0 {
-				importSpecs = append(importSpecs, importSpec...)
+				if len(uniqueDecls) > 0 {
+					decls = append(decls, uniqueDecls...)
+				}
+				if len(importSpec) > 0 {
+					importSpecs = append(importSpecs, importSpec...)
+				}
 			}
 		}
 
-		gmt, ok := gType.UnderLyingType().(*MapType)
+		gmt, ok := gType.(*MapType)
 		if ok {
 			decls = append(decls, y.getByIdMethod(gmt.ValueType))
 		}
