@@ -62,24 +62,29 @@ func ParseType(name string, data JsonMap, universe Universe) (GeneratedType, err
 	if err := gt.parse(data, universe); err != nil {
 		return &generatedType{}, err
 	}
+	gt.name = name
 	return &gt, nil
 }
 
-func generatedSimpleObject(t JsonType) GeneratedType {
+func generatedSimpleObject(name string, t JsonType) GeneratedType {
 	return &generatedType{
 		jsonType: t,
+		name:     name,
 	}
 }
 
-func generatedArray(t JsonType) GeneratedType {
+func generatedArray(name string, t JsonType) GeneratedType {
 	return &generatedArrayType{
 		generatedType: generatedType{
 			jsonType: t,
+			name:     name,
 		},
 	}
 }
 
 type GeneratedType interface {
+	Name() string
+	SetName(string)
 	// SameType returns true if all fields are of the same type, their names do not need to match
 	// And their union contains the same elements as each subset on her own
 	SameType(other GeneratedType) bool
@@ -89,7 +94,7 @@ type GeneratedType interface {
 	SameJsonType(other GeneratedType) bool
 	IsComplexObject() bool
 	Merge(other GeneratedType) error
-	Representation() []*ast.GenDecl
+	Representation() []ast.Decl
 }
 
 type generatedArrayType struct {
@@ -137,6 +142,15 @@ type generatedType struct {
 	jsonType JsonType
 	imports  []string
 	types    GeneratedTypeMap
+	name     string
+}
+
+func (gt *generatedType) Name() string {
+	return gt.name
+}
+
+func (gt *generatedType) SetName(name string) {
+	gt.name = name
 }
 
 func (gt *generatedType) SameType(o GeneratedType) bool {
@@ -231,6 +245,7 @@ func (gt *generatedType) parse(data JsonMap, universe Universe) error {
 			return err
 		}
 
+		gType.SetName(name)
 		gt.types[name] = gType
 	}
 
@@ -240,33 +255,11 @@ func (gt *generatedType) parse(data JsonMap, universe Universe) error {
 func parse(name string, value interface{}, universe Universe) (GeneratedType, error) {
 	switch value.(type) {
 	case string:
-		return generatedSimpleObject(JsonString), nil
+		return generatedSimpleObject(name, JsonString), nil
 	case float64:
-		return generatedSimpleObject(JsonFloat64), nil
-	case float32:
-		return generatedSimpleObject(JsonFloat32), nil
+		return generatedSimpleObject(name, JsonFloat64), nil
 	case bool:
-		return generatedSimpleObject(JsonBool), nil
-	case int:
-		return generatedSimpleObject(JsonInt), nil
-	case uint:
-		return generatedSimpleObject(JsonUint), nil
-	case int64:
-		return generatedSimpleObject(JsonInt64), nil
-	case uint64:
-		return generatedSimpleObject(JsonUint64), nil
-	case int32:
-		return generatedSimpleObject(JsonInt32), nil
-	case uint32:
-		return generatedSimpleObject(JsonUint32), nil
-	case int16:
-		return generatedSimpleObject(JsonInt16), nil
-	case uint16:
-		return generatedSimpleObject(JsonUint16), nil
-	case int8:
-		return generatedSimpleObject(JsonInt8), nil
-	case uint8:
-		return generatedSimpleObject(JsonUint8), nil
+		return generatedSimpleObject(name, JsonBool), nil
 	case JsonMap:
 		objectType, err := ParseType(name, value.(JsonMap), universe)
 		if err != nil {
@@ -283,7 +276,7 @@ func parse(name string, value interface{}, universe Universe) (GeneratedType, er
 			return &generatedArrayType{*arrayType.(*generatedType)}, nil
 		} else {
 			// The array contained no elements, we can't know what is inside it
-			return generatedArray(JsonInterface), nil
+			return generatedArray(name, JsonInterface), nil
 		}
 	case nil:
 		return nil, nil
@@ -319,7 +312,7 @@ func toSafeGoName(name string) string {
 	return camelCaseName
 }
 
-func (gt *generatedType) Representation() []*ast.GenDecl {
+func (gt *generatedType) Representation() []ast.Decl {
 	fieldList := ast.FieldList{}
 
 	structDecl := ast.GenDecl{
@@ -334,7 +327,7 @@ func (gt *generatedType) Representation() []*ast.GenDecl {
 		},
 	}
 
-	newTypes := []*ast.GenDecl{&structDecl}
+	newTypes := []ast.Decl{&structDecl}
 
 	for name, g := range gt.types {
 		typeName := g.JsonType().TypeName()

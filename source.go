@@ -1,19 +1,25 @@
 package yoitsu
 
 import (
+	"fmt"
+	"go/ast"
+	"go/token"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"strconv"
 )
 
 type Source interface {
 	Json() ([]byte, error)
 	Name() string
+	LoadMethod(structName string) (decl ast.Decl, importSpec []ast.Spec)
 }
 
-func NewReaderSource(name string, r io.Reader) Source {
-	return &readerSource{
-		r:    r,
+func NewFileSource(name string, f string) Source {
+	return &fileSource{
+		f:    f,
 		name: name,
 	}
 }
@@ -35,24 +41,132 @@ func NewUrlSource(name string, u string, opts ...Option[urlSource]) Source {
 	return &us
 }
 
-type readerSource struct {
-	r    io.Reader
+type fileSource struct {
+	f    string
 	b    []byte
 	name string
 }
 
-func (r *readerSource) Json() ([]byte, error) {
-	if r.b != nil {
-		return r.b, nil
+func (src *fileSource) Json() ([]byte, error) {
+	if src.b != nil {
+		return src.b, nil
 	}
 
+	var file *os.File
 	var err error
-	r.b, err = io.ReadAll(r.r)
-	return r.b, err
+
+	file, err = os.Open(src.f)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	src.b, err = io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+	return src.b, nil
 }
 
-func (r *readerSource) Name() string {
-	return r.name
+func (src *fileSource) Name() string {
+	return src.name
+}
+
+func (src *fileSource) LoadMethod(structName string) (decl ast.Decl, importSpec []ast.Spec) {
+	receiver := &ast.FieldList{
+		List: []*ast.Field{
+			{
+				Names: []*ast.Ident{ast.NewIdent(tokenReceiver)},
+				Type:  ast.NewIdent(tokenPointer + structName),
+			},
+		},
+	}
+
+	funcName := ast.NewIdent(tokenMethodLoadName)
+	funcType := &ast.FuncType{
+		Params: &ast.FieldList{},
+		Results: &ast.FieldList{
+			List: []*ast.Field{
+				{
+					Type: ast.NewIdent(tokenError),
+				},
+			},
+		},
+	}
+
+	funcBody := &ast.BlockStmt{
+		List: []ast.Stmt{
+			&ast.AssignStmt{
+				Lhs: []ast.Expr{
+					ast.NewIdent("f"),
+					ast.NewIdent("err"),
+				},
+				Tok: token.DEFINE,
+				Rhs: []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("os"),
+							Sel: ast.NewIdent("Open"),
+						},
+						Args: []ast.Expr{
+							&ast.BasicLit{
+								Kind:  token.STRING,
+								Value: fmt.Sprintf(`"%s"`, src.f),
+							},
+						},
+					},
+				},
+			},
+			ifErrNotNilStmt(),
+			deferStmt("f", "Close"),
+			&ast.AssignStmt{
+				Lhs: []ast.Expr{
+					ast.NewIdent("data"),
+					ast.NewIdent("err"),
+				},
+				Tok: token.DEFINE,
+				Rhs: []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("io"),
+							Sel: ast.NewIdent("ReadAll"),
+						},
+						Args: []ast.Expr{
+							ast.NewIdent("f"),
+						},
+					},
+				},
+			},
+			ifErrNotNilStmt(),
+			unmarshallStmt(tokenReceiver, tokenData),
+		},
+	}
+
+	return &ast.FuncDecl{
+			Recv: receiver,
+			Name: funcName,
+			Type: funcType,
+			Body: funcBody,
+		}, []ast.Spec{
+			&ast.ImportSpec{
+				Path: &ast.BasicLit{
+					Kind:  token.STRING,
+					Value: strconv.Quote("os"),
+				},
+			},
+			&ast.ImportSpec{
+				Path: &ast.BasicLit{
+					Kind:  token.STRING,
+					Value: strconv.Quote("io"),
+				},
+			},
+			&ast.ImportSpec{
+				Path: &ast.BasicLit{
+					Kind:  token.STRING,
+					Value: strconv.Quote("encoding/json"),
+				},
+			},
+		}
 }
 
 type urlSource struct {
@@ -62,19 +176,19 @@ type urlSource struct {
 	name       string
 }
 
-func (r *urlSource) Json() ([]byte, error) {
-	if r.b != nil {
-		return r.b, nil
+func (src *urlSource) Json() ([]byte, error) {
+	if src.b != nil {
+		return src.b, nil
 	}
 
-	parsedUrl, err := url.Parse(r.url)
+	parsedUrl, err := url.Parse(src.url)
 	if err != nil {
 		return nil, err
 	}
 
-	r.url = parsedUrl.String()
+	src.url = parsedUrl.String()
 
-	resp, err := r.httpClient.Get(r.url)
+	resp, err := src.httpClient.Get(src.url)
 	if err != nil {
 		return nil, err
 	}
@@ -83,12 +197,109 @@ func (r *urlSource) Json() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	r.b = b
+	src.b = b
 	return b, nil
 }
 
-func (r *urlSource) Name() string {
-	return r.name
+func (src *urlSource) Name() string {
+	return src.name
+}
+
+func (src *urlSource) LoadMethod(structName string) (decl ast.Decl, importSpec []ast.Spec) {
+	receiver := &ast.FieldList{
+		List: []*ast.Field{
+			{
+				Names: []*ast.Ident{ast.NewIdent(tokenReceiver)},
+				Type:  ast.NewIdent(tokenPointer + structName),
+			},
+		},
+	}
+
+	funcName := ast.NewIdent(tokenMethodLoadName)
+	funcType := &ast.FuncType{
+		Params: &ast.FieldList{},
+		Results: &ast.FieldList{
+			List: []*ast.Field{
+				{
+					Type: ast.NewIdent(tokenError),
+				},
+			},
+		},
+	}
+
+	funcBody := &ast.BlockStmt{
+		List: []ast.Stmt{
+			&ast.AssignStmt{
+				Lhs: []ast.Expr{
+					ast.NewIdent("res"),
+					ast.NewIdent("err"),
+				},
+				Tok: token.DEFINE,
+				Rhs: []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("http"),
+							Sel: ast.NewIdent("Get"),
+						},
+						Args: []ast.Expr{
+							&ast.BasicLit{
+								Kind:  token.STRING,
+								Value: fmt.Sprintf(`"%s"`, src.url),
+							},
+						},
+					},
+				},
+			},
+			ifErrNotNilStmt(),
+			deferStmt("res.Body", "Close"),
+			&ast.AssignStmt{
+				Lhs: []ast.Expr{
+					ast.NewIdent("data"),
+					ast.NewIdent("err"),
+				},
+				Tok: token.DEFINE,
+				Rhs: []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("io"),
+							Sel: ast.NewIdent("ReadAll"),
+						},
+						Args: []ast.Expr{
+							ast.NewIdent("res.Body"),
+						},
+					},
+				},
+			},
+			ifErrNotNilStmt(),
+			unmarshallStmt(tokenReceiver, tokenData),
+		},
+	}
+
+	return &ast.FuncDecl{
+			Recv: receiver,
+			Name: funcName,
+			Type: funcType,
+			Body: funcBody,
+		}, []ast.Spec{
+			&ast.ImportSpec{
+				Path: &ast.BasicLit{
+					Kind:  token.STRING,
+					Value: strconv.Quote("net/http"),
+				},
+			},
+			&ast.ImportSpec{
+				Path: &ast.BasicLit{
+					Kind:  token.STRING,
+					Value: strconv.Quote("io"),
+				},
+			},
+			&ast.ImportSpec{
+				Path: &ast.BasicLit{
+					Kind:  token.STRING,
+					Value: strconv.Quote("encoding/json"),
+				},
+			},
+		}
 }
 
 func UrlSourceWithHttpClient(c *http.Client) Option[urlSource] {

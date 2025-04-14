@@ -47,7 +47,7 @@ func (u *universe) AddType(generatedType GeneratedType) {
 
 func WithField(name string, jsonType JsonType) Option[*generatedType] {
 	return func(gt *generatedType) {
-		gt.types[name] = generatedSimpleObject(jsonType)
+		gt.types[name] = generatedSimpleObject(name, jsonType)
 	}
 }
 
