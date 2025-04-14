@@ -1,5 +1,6 @@
 package yoitsu
 
+// Universe holds the GeneratedType available for use while parsing
 type Universe interface {
 	// FindType returns the passed type is no type is found
 	FindType(GeneratedType) GeneratedType

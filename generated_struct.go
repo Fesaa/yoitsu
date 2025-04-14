@@ -8,10 +8,22 @@ import (
 	"strconv"
 )
 
-var (
-	ValidIdFunc func(string) bool = defaultValidIdFunc
-)
+// ValidIdFunc decided if a field name is an ID, if all field names are IDs, and all StructField.Type's are
+// the same, the StructType is converted into a MapType
+//
+// See StructType.Cleanup for more info on semantics
+var ValidIdFunc = defaultValidIdFunc
 
+// ShouldConvertToMap decided if a StructType should be converted into a MapType
+//
+// See StructType.Cleanup for default behavior
+var ShouldConvertToMap = defaultShouldConvertToMapFunc
+
+// StructType represents a "smart" JsonMap
+//
+// # A StructType may be converted back to a MapType during cleanup, see ValidIdFunc to customize this behavior
+//
+// Add this type to your own (non-empty) Universe to have the Parser (re-)use your own types
 type StructType struct {
 	Name   string
 	Import string
@@ -20,6 +32,7 @@ type StructType struct {
 	tag string
 }
 
+// StructField represents a field in a StructType
 type StructField struct {
 	Type GeneratedType
 	Tag  string
@@ -136,6 +149,19 @@ func (s *StructType) SameType(other GeneratedType, forgiving bool) bool {
 	return true
 }
 
+// Cleanup will cleanup all fields, then check if this StructType could be a MapType.
+//
+// # The following conditions must be met
+//
+// - If not all fields are an Id, all fields must be GeneratedType.IsComplexObject
+//
+// - If there are less than two fields, the field must be GeneratedType.IsComplexObject
+//
+// - There must be at least one field
+//
+// - The type of the fields must not be of type InterfaceType
+//
+// Overwrite this behaviour by changing the ShouldConvertToMap function
 func (s *StructType) Cleanup() (GeneratedType, error) {
 	// Cleanup children
 	for tag, field := range s.Fields {
@@ -167,19 +193,7 @@ func (s *StructType) Cleanup() (GeneratedType, error) {
 		}
 	}
 
-	if !allComplex && !allIds {
-		return s, nil
-	}
-
-	if len(s.Fields) < 2 && !allComplex {
-		return s, nil
-	}
-
-	if tracker == nil {
-		return s, nil
-	}
-
-	if tracker.SameType(InterfaceType, false) {
+	if !ShouldConvertToMap(s, allComplex, allIds, tracker) {
 		return s, nil
 	}
 
@@ -251,6 +265,26 @@ func (s *StructType) Representation() []ast.Decl {
 	}
 
 	return newTypes
+}
+
+func defaultShouldConvertToMapFunc(s *StructType, allComplex, allIds bool, tracker GeneratedType) bool {
+	if !allComplex && !allIds {
+		return false
+	}
+
+	if len(s.Fields) < 2 && !allComplex {
+		return false
+	}
+
+	if tracker == nil {
+		return false
+	}
+
+	if tracker.SameType(InterfaceType, false) {
+		return false
+	}
+
+	return true
 }
 
 func defaultValidIdFunc(s string) bool {

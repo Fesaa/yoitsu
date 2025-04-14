@@ -11,9 +11,16 @@ import (
 	"strconv"
 )
 
+// Source tells the Parser and Yoitsu where to find the Json data.
 type Source interface {
 	Json() ([]byte, error)
+	// Name is used for the root type and file name (Source.Name + ".generated.go")
 	Name() string
+}
+
+// LoadAbleSource returns the body, and required imports to load the data when using the generated file.
+// Implement this when you wish to generate Accessors. The provided sources both implement this interface
+type LoadAbleSource interface {
 	LoadMethod() (stmt *ast.BlockStmt, importSpec []ast.Spec)
 }
 

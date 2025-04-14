@@ -5,6 +5,7 @@ import (
 	"go/ast"
 )
 
+// MapType represents a JsonMap, most operation are done on the underlying type
 type MapType struct {
 	ValueType GeneratedType
 }

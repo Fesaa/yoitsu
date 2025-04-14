@@ -13,41 +13,43 @@ var (
 	TimeType      = NewNativeType("time.Time", "time")
 )
 
-func NewNativeType(t string, i string) GeneratedType {
-	return &nativeType{
-		_type:   t,
-		_import: i,
+func NewNativeType(typeName string, importLine string) GeneratedType {
+	return &NativeType{
+		_type:   typeName,
+		_import: importLine,
 	}
 }
 
-// nativeType represents an existing go type
-type nativeType struct {
+// NativeType represents an existing go type
+//
+// See Parser.RegisterNativeType for how to expand the current list
+type NativeType struct {
 	_type   string
 	_import string
 }
 
-func (g *nativeType) UnderLyingType() GeneratedType {
+func (g *NativeType) UnderLyingType() GeneratedType {
 	return g
 }
 
-func (g *nativeType) Copy() GeneratedType {
+func (g *NativeType) Copy() GeneratedType {
 	return NewNativeType(g._type, g._import)
 }
 
-func (g *nativeType) IsComplexObject() bool {
+func (g *NativeType) IsComplexObject() bool {
 	return false
 }
 
-func (g *nativeType) Type() string {
+func (g *NativeType) Type() string {
 	return g._type
 }
 
-func (g *nativeType) Merge(other GeneratedType) (GeneratedType, error) {
+func (g *NativeType) Merge(other GeneratedType) (GeneratedType, error) {
 	if g.Type() == InterfaceType.Type() {
 		return other, nil
 	}
 
-	if _, ok := other.(*nativeType); !ok {
+	if _, ok := other.(*NativeType); !ok {
 		return nil, fmt.Errorf("nativeType %w", ErrCantMergeDifferentTypes)
 	}
 
@@ -56,27 +58,27 @@ func (g *nativeType) Merge(other GeneratedType) (GeneratedType, error) {
 	}
 
 	if !g.SameType(other, false) {
-		return nil, fmt.Errorf("nativeType %w", ErrCantMergeDifferentTypes)
+		return nil, fmt.Errorf("NativeType %w", ErrCantMergeDifferentTypes)
 	}
 
 	return g, nil
 }
 
-func (g *nativeType) SameType(other GeneratedType, forgiving bool) bool {
+func (g *NativeType) SameType(other GeneratedType, forgiving bool) bool {
 	return g.Type() == other.Type()
 }
 
-func (g *nativeType) Imports() []string {
+func (g *NativeType) Imports() []string {
 	if g._import != "" {
 		return []string{g._import}
 	}
 	return nil
 }
 
-func (g *nativeType) Cleanup() (GeneratedType, error) {
+func (g *NativeType) Cleanup() (GeneratedType, error) {
 	return g, nil
 }
 
-func (g *nativeType) Representation() []ast.Decl {
+func (g *NativeType) Representation() []ast.Decl {
 	panic("native go type do not need a separate representation")
 }

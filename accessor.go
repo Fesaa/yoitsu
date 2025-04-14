@@ -55,7 +55,10 @@ func (y *Yoitsu) generateMethodAccessors(gType GeneratedType) (decls []ast.Decl,
 		importSpec []ast.Spec
 	)
 
-	decl, importSpec = y.loadMethod(gType.UnderLyingType().Type())
+	decl, importSpec, err = y.loadMethod(gType.UnderLyingType().Type())
+	if err != nil {
+		return
+	}
 	decls = append(decls, decl)
 	importSpecs = append(importSpecs, importSpec...)
 
@@ -147,7 +150,7 @@ func (y *Yoitsu) getByIdMethod(gType GeneratedType) ast.Decl {
 	}
 }
 
-func (y *Yoitsu) loadMethod(structName string) (ast.Decl, []ast.Spec) {
+func (y *Yoitsu) loadMethod(structName string) (ast.Decl, []ast.Spec, error) {
 	receiver := &ast.FieldList{
 		List: []*ast.Field{
 			{
@@ -169,7 +172,12 @@ func (y *Yoitsu) loadMethod(structName string) (ast.Decl, []ast.Spec) {
 		},
 	}
 
-	funcBody, importSpec := y.src.LoadMethod()
+	loadAbleSrc, ok := y.src.(LoadAbleSource)
+	if !ok {
+		return nil, nil, ErrSrcIsNotLoadAble
+	}
+
+	funcBody, importSpec := loadAbleSrc.LoadMethod()
 
 	doc := fmt.Sprintf("\n// %s retrieves the data.", tokenMethodLoadName)
 	if y.accessors.ById {
@@ -188,7 +196,7 @@ func (y *Yoitsu) loadMethod(structName string) (ast.Decl, []ast.Spec) {
 		Name: funcName,
 		Type: funcType,
 		Body: funcBody,
-	}, importSpec
+	}, importSpec, nil
 }
 
 func (y *Yoitsu) allMethod(gType GeneratedType) ast.Decl {
@@ -460,7 +468,7 @@ func (y *Yoitsu) uniqueJsonPrimitives(gType StructType) (found []StructField) {
 	data := y.root.([]interface{})
 
 	for name, field := range gType.Fields {
-		prim, ok := field.Type.(*nativeType)
+		prim, ok := field.Type.(*NativeType)
 		if !ok {
 			continue
 		}

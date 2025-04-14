@@ -6,11 +6,16 @@ import (
 	"unicode"
 )
 
+// GeneratedType is our JsonObject abstraction with type info
 type GeneratedType interface {
+	// Cleanup traverses the type and tries fitting struts in Maps. See ValidIdFunc for how to control this
 	Cleanup() (GeneratedType, error)
+	// IsComplexObject returns true if the GeneratedType is not a NativeType
 	IsComplexObject() bool
+	// Merge returns the result of the merge, this GeneratedType may also have been modified
 	Merge(other GeneratedType) (GeneratedType, error)
 
+	// Type returns the string to use while constructing go-ast
 	Type() string
 	// UnderLyingType may return the type itself, if there is no underlying type
 	UnderLyingType() GeneratedType
@@ -18,9 +23,12 @@ type GeneratedType interface {
 	// See specific implementations for details
 	SameType(other GeneratedType, forgiving bool) bool
 
+	// Imports returns on unsorted slice of import statements needed to construct this type
 	Imports() []string
+	// Representation returns the ast.Decl that needs to be included in the ast.File for this type
 	Representation() []ast.Decl
 
+	// Copy returns a new, but equivalent, GeneratedType instance
 	Copy() GeneratedType
 }
 

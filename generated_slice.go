@@ -6,8 +6,14 @@ import (
 	"strings"
 )
 
+// SliceNameFormatter is used to format names for types in JsonArray's
+//
+// The default adds "Item" if not present to the field anme
 var SliceNameFormatter = sliceNameFormatter
 
+// SliceType represents a JsonArray, most operations are done on the underlying type
+//
+// See SliceNameFormatter for how to overwrite the naming scheme
 type SliceType struct {
 	SliceType GeneratedType
 }

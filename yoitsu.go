@@ -13,52 +13,62 @@ import (
 
 type Metadata struct {
 	packageName string
-
-	SmartMapMapping bool
 }
 
 type Accessors struct {
-	Generate         bool
-	ById             bool
+	// Generate an Accessor struct, loads data from Source
+	Generate bool
+	// If the jsons is of type JsonArray, will generate methods based on unique fields in the root of the
+	// JsonObjects in the array
+	ById bool
+	// Unused
 	GroupByPrimitive bool
 }
 
 type Yoitsu struct {
-	src      Source
-	metadata Metadata
-	universe Universe
+	// May be nil, populated after calling Yoitsu.GenerateFile
+	File *ast.File
 
+	src       Source
+	metadata  Metadata
+	universe  Universe
 	accessors Accessors
 
 	root   interface{}
 	parser *Parser
-	file   *ast.File
 }
 
+// WithUniverse includes the passes Universe in Yoitsu.
+// See Universe documentation
 func WithUniverse(universe Universe) Option[*Yoitsu] {
 	return func(y *Yoitsu) {
 		y.universe = universe
 	}
 }
 
+// WithPackageName sets the package name, defaults to "generated"
 func WithPackageName(name string) Option[*Yoitsu] {
 	return func(y *Yoitsu) {
 		y.metadata.packageName = name
 	}
 }
 
+// WithGenerateAccessors sets the accessor options, defaults to false on all
 func WithGenerateAccessors(accessorOpt Option[*Accessors]) Option[*Yoitsu] {
 	return func(y *Yoitsu) {
 		accessorOpt(&y.accessors)
 	}
 }
 
+// WithMetadata to further customize Metadata, currently unused
 func WithMetadata(metaOpt Option[*Metadata]) Option[*Yoitsu] {
 	return func(y *Yoitsu) {
 		metaOpt(&y.metadata)
 	}
 }
 
+// New create a new Yoitsu instance, it is recommended to create a new one per generation.
+// See documentation for options on how to customize the output
 func New(src Source, opts ...Option[*Yoitsu]) *Yoitsu {
 	yt := &Yoitsu{
 		src:       src,
@@ -97,6 +107,7 @@ func (y *Yoitsu) getRootFromSrc() (interface{}, error) {
 	return root, nil
 }
 
+// GenerateFile parses the json from Source, and sets the Yoitsu.File field
 func (y *Yoitsu) GenerateFile() (err error) {
 	y.root, err = y.getRootFromSrc()
 	if err != nil {
@@ -148,7 +159,7 @@ func (y *Yoitsu) GenerateFile() (err error) {
 		decls = append(decls, accessorDecls...)
 	}
 
-	y.file = &ast.File{
+	y.File = &ast.File{
 		Doc: &ast.CommentGroup{
 			List: []*ast.Comment{
 				{
@@ -195,9 +206,10 @@ func (y *Yoitsu) imports(gType GeneratedType) (imports []ast.Spec) {
 	return
 }
 
+// WriteToDisk cannot be called while Yoitsu.File is nil, call Yoitsu.GenerateFile first. Writes file to disk
 func (y *Yoitsu) WriteToDisk(dir string) error {
-	if y.file == nil {
-		return fmt.Errorf("no file generated. Call Yoitsu.GenerateFile first")
+	if y.File == nil {
+		return fmt.Errorf("no File generated. Call Yoitsu.GenerateFile first")
 	}
 
 	outFile, err := os.Create(filepath.Join(dir, y.src.Name()+".generated.go"))
@@ -207,5 +219,5 @@ func (y *Yoitsu) WriteToDisk(dir string) error {
 	defer outFile.Close()
 
 	fset := token.NewFileSet()
-	return format.Node(outFile, fset, y.file)
+	return format.Node(outFile, fset, y.File)
 }
