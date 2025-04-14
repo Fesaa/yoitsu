@@ -20,6 +20,23 @@ type StructField struct {
 	Tag  string
 }
 
+func (s *StructType) Copy() GeneratedType {
+	fields := make(map[string]*StructField)
+	for k, v := range s.Fields {
+		fields[k] = &StructField{
+			Type: v.Type.Copy(),
+			Tag:  v.Tag,
+		}
+	}
+
+	return &StructType{
+		Name:   s.Name,
+		tag:    s.tag,
+		Import: s.Import,
+		Fields: fields,
+	}
+}
+
 func (s *StructType) IsComplexObject() bool {
 	return true
 }
@@ -48,6 +65,12 @@ func (s *StructType) Merge(other GeneratedType) (GeneratedType, error) {
 
 		existingField.Type = newFieldType
 		s.Fields[tag] = existingField
+	}
+
+	// Reset import and take non-imported name if merged is a new type
+	if st.Import == "" {
+		s.Name = st.Name
+		s.Import = ""
 	}
 
 	return s, nil
@@ -116,14 +139,13 @@ func (s *StructType) Cleanup() (GeneratedType, error) {
 		s.Fields[tag] = field
 	}
 
-	if len(s.Fields) < 2 {
-		return s, nil
-	}
-
 	// If all fields are the same type, convert into map
 	var tracker GeneratedType
+	allComplex := true
 
 	for _, field := range s.Fields {
+		allComplex = allComplex && field.Type.IsComplexObject()
+
 		if tracker == nil {
 			tracker = field.Type
 			continue
@@ -134,6 +156,10 @@ func (s *StructType) Cleanup() (GeneratedType, error) {
 		}
 	}
 
+	if len(s.Fields) < 2 && !allComplex {
+		return s, nil
+	}
+
 	if tracker == nil {
 		return s, nil
 	}
@@ -142,7 +168,6 @@ func (s *StructType) Cleanup() (GeneratedType, error) {
 		return s, nil
 	}
 
-	// All fields are complex and the same
 	return &MapType{
 		ValueType: tracker,
 	}, nil

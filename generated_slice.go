@@ -12,6 +12,12 @@ type SliceType struct {
 	SliceType GeneratedType
 }
 
+func (s *SliceType) Copy() GeneratedType {
+	return &SliceType{
+		SliceType: s.SliceType.Copy(),
+	}
+}
+
 func (s *SliceType) IsComplexObject() bool {
 	return true
 }
@@ -35,7 +41,10 @@ func (s *SliceType) Type() string {
 }
 
 func (s *SliceType) SameType(other GeneratedType, forgiving bool) bool {
-	return s.Type() == other.Type()
+	if sliceType, ok := other.(*SliceType); ok {
+		return s.SliceType.SameType(sliceType.SliceType, forgiving)
+	}
+	return false
 }
 
 func (s *SliceType) Cleanup() (GeneratedType, error) {

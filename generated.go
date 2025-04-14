@@ -18,6 +18,8 @@ type GeneratedType interface {
 
 	Imports() []string
 	Representation() []ast.Decl
+
+	Copy() GeneratedType
 }
 
 func toSafeGoName(name string) string {

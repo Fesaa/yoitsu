@@ -33,7 +33,7 @@ type universe struct {
 func (u *universe) FindType(generatedType GeneratedType) GeneratedType {
 	for _, t := range u._types {
 		if t.SameType(generatedType, false) {
-			return t
+			return t.Copy()
 		}
 	}
 	return generatedType

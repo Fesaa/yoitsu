@@ -26,6 +26,10 @@ type nativeType struct {
 	_import string
 }
 
+func (g *nativeType) Copy() GeneratedType {
+	return NewNativeType(g._type, g._import)
+}
+
 func (g *nativeType) IsComplexObject() bool {
 	return false
 }

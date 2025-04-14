@@ -9,6 +9,12 @@ type MapType struct {
 	ValueType GeneratedType
 }
 
+func (m *MapType) Copy() GeneratedType {
+	return &MapType{
+		ValueType: m.ValueType.Copy(),
+	}
+}
+
 func (m *MapType) IsComplexObject() bool {
 	return true
 }
@@ -33,7 +39,10 @@ func (m *MapType) Type() string {
 }
 
 func (m *MapType) SameType(other GeneratedType, forgiving bool) bool {
-	return m.Type() == other.Type()
+	if mType, ok := other.(*MapType); ok {
+		return m.ValueType.SameType(mType.ValueType, forgiving)
+	}
+	return false
 }
 
 func (m *MapType) Imports() []string {
