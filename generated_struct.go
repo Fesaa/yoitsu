@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"slices"
 	"strconv"
+	"strings"
 )
 
 // ValidIdFunc decided if a field name is an ID, if all field names are IDs, and all StructField.Type's are
@@ -89,10 +90,17 @@ func (s *StructType) Merge(other GeneratedType) (GeneratedType, error) {
 		s.Fields[tag] = existingField
 	}
 
-	// Reset import and take non-imported name if merged is a new type
-	if st.Import == "" {
+	if st.Import == "" && s.Import != "" { // Reset import and take non-imported name if merged is a new type
 		s.Name = st.Name
 		s.Import = ""
+	} else if st.Import == "" && s.Import == "" { // When merging, always use the "smallest" name to ensure predictable
+		if s.Name >= st.Name {
+			s.Name = st.Name
+			s.tag = st.tag
+		}
+	} else if st.Import != "" {
+		s.Import = st.Import
+		s.Name = st.Name
 	}
 
 	return s, nil
@@ -102,14 +110,12 @@ func (s *StructType) Type() string {
 	return s.Name
 }
 
-// SameType will merge types if forgiving is true if this would cause the types to be equal
 func (s *StructType) SameType(other GeneratedType, forgiving bool) bool {
 	sOther, ok := other.(*StructType)
 	if !ok {
 		return false
 	}
 
-	shouldMerge := false
 	for tag, field := range s.Fields {
 		sField, ok := sOther.Fields[tag]
 		if !ok {
@@ -117,7 +123,6 @@ func (s *StructType) SameType(other GeneratedType, forgiving bool) bool {
 				return false
 			}
 
-			shouldMerge = true
 			continue
 		}
 
@@ -136,14 +141,6 @@ func (s *StructType) SameType(other GeneratedType, forgiving bool) bool {
 		if !forgiving {
 			return false
 		}
-
-		shouldMerge = true
-	}
-
-	if shouldMerge {
-		// We've already done the struct check, this will not fail
-		mergedType, _ := s.Merge(other)
-		s.Fields = mergedType.(*StructType).Fields
 	}
 
 	return true
@@ -193,13 +190,48 @@ func (s *StructType) Cleanup() (GeneratedType, error) {
 		}
 	}
 
+	if tracker == nil {
+		return s, nil
+	}
+
 	if !ShouldConvertToMap(s, allComplex, allIds, tracker) {
 		return s, nil
+	}
+
+	// Merge all types to ensure we have all fields, and a predictable name
+	for _, field := range s.Fields {
+		var err error
+		tracker, err = tracker.Merge(field.Type)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if st, ok := tracker.(*StructType); ok {
+		if st.tag != "" {
+			st.removeFromName(st.tag)
+		} else {
+			st.removeFromName(st.Name)
+		}
 	}
 
 	return &MapType{
 		ValueType: tracker,
 	}, nil
+}
+
+func (s *StructType) removeFromName(str string) {
+	if s.Import != "" {
+		return
+	}
+
+	s.Name = strings.ReplaceAll(s.Name, str, "")
+
+	for _, field := range s.Fields {
+		if st, ok := field.Type.UnderLyingType().(*StructType); ok {
+			st.removeFromName(str)
+		}
+	}
 }
 
 func (s *StructType) Imports() []string {

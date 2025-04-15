@@ -19,8 +19,8 @@ type GeneratedType interface {
 	Type() string
 	// UnderLyingType may return the type itself, if there is no underlying type
 	UnderLyingType() GeneratedType
-	// SameType may modify the struct if forgiving is true to force equivalence if possible
-	// See specific implementations for details
+	// SameType returns true if the types are equal. If forgiving is true, SameType will also return true if the types
+	// are equal after merging (/can be merged)
 	SameType(other GeneratedType, forgiving bool) bool
 
 	// Imports returns on unsorted slice of import statements needed to construct this type
