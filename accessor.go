@@ -29,6 +29,10 @@ func (y *Yoitsu) generateMethodAccessors(gType GeneratedType) (decls []ast.Decl,
 		return
 	}
 
+	if _, ok := gType.UnderLyingType().(*StructType); !ok {
+		return
+	}
+
 	fieldList := ast.FieldList{}
 
 	accessorsStruct := &ast.GenDecl{
