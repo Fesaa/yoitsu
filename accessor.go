@@ -218,18 +218,78 @@ func (y *Yoitsu) allMethod(gType GeneratedType) ast.Decl {
 				{
 					Type: ast.NewIdent(gType.Type()),
 				},
+				{
+					Type: ast.NewIdent(tokenError),
+				},
 			},
 		},
 	}
 
 	funcBody := &ast.BlockStmt{
 		List: []ast.Stmt{
+			&ast.IfStmt{
+				Cond: &ast.BinaryExpr{
+					X: &ast.SelectorExpr{
+						X:   ast.NewIdent(tokenReceiver),
+						Sel: ast.NewIdent(tokenData),
+					},
+					Op: token.EQL,
+					Y:  ast.NewIdent("nil"),
+				},
+				Body: &ast.BlockStmt{
+					List: []ast.Stmt{
+						&ast.AssignStmt{
+							Lhs: []ast.Expr{
+								ast.NewIdent("err"),
+							},
+							Tok: token.DEFINE,
+							Rhs: []ast.Expr{
+								&ast.CallExpr{
+									Fun: &ast.SelectorExpr{
+										X:   ast.NewIdent(tokenReceiver),
+										Sel: ast.NewIdent(tokenMethodLoadName),
+									},
+								},
+							},
+						},
+						&ast.IfStmt{
+							Cond: &ast.BinaryExpr{
+								X:  ast.NewIdent("err"),
+								Op: token.NEQ,
+								Y:  ast.NewIdent("nil"),
+							},
+							Body: &ast.BlockStmt{
+								List: []ast.Stmt{
+									&ast.ReturnStmt{
+										Results: []ast.Expr{
+											&ast.CompositeLit{
+												Type: ast.NewIdent(gType.Type()),
+											},
+											ast.NewIdent("err"),
+										},
+									},
+								},
+							},
+						},
+						&ast.ExprStmt{
+							X: &ast.CallExpr{
+								Fun: &ast.SelectorExpr{
+									X:   ast.NewIdent(tokenReceiver),
+									Sel: ast.NewIdent(tokenMethodGroupData),
+								},
+								Args: []ast.Expr{},
+							},
+						},
+					},
+				},
+			},
 			&ast.ReturnStmt{
 				Results: []ast.Expr{
 					&ast.SelectorExpr{
 						X:   ast.NewIdent(tokenReceiver),
 						Sel: ast.NewIdent(tokenData),
 					},
+					ast.NewIdent("nil"),
 				},
 			},
 		},
