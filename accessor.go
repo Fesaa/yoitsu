@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/token"
 	"slices"
+	"strings"
 )
 
 const (
@@ -307,6 +308,10 @@ func (y *Yoitsu) uniqueGetters(gType StructType, fieldList *ast.FieldList) (decl
 	if len(unqiueJsonPrimitives) == 0 {
 		return
 	}
+
+	slices.SortFunc(unqiueJsonPrimitives, func(a, b StructField) int {
+		return strings.Compare(a.Tag, b.Tag)
+	})
 
 	decls = append(decls, y.groupByMethod(gType, unqiueJsonPrimitives))
 
