@@ -27,7 +27,8 @@ type Accessors struct {
 
 type Yoitsu struct {
 	// May be nil, populated after calling Yoitsu.GenerateFile
-	File *ast.File
+	File       *ast.File
+	noFileData bool
 
 	src       Source
 	metadata  Metadata
@@ -154,6 +155,9 @@ func (y *Yoitsu) GenerateFile() (err error) {
 
 	if len(structDecls) > 0 {
 		decls = append(decls, structDecls...)
+	} else {
+		y.noFileData = true
+		return
 	}
 
 	if len(accessorDecls) > 0 {
@@ -172,6 +176,7 @@ func (y *Yoitsu) GenerateFile() (err error) {
 		Decls: decls,
 	}
 
+	y.noFileData = false
 	return nil
 }
 
@@ -208,7 +213,12 @@ func (y *Yoitsu) imports(gType GeneratedType) (imports []ast.Spec) {
 }
 
 // WriteToDisk cannot be called while Yoitsu.File is nil, call Yoitsu.GenerateFile first. Writes file to disk
+// Can return ErrNoData if the parsed json did not contain any parseable types
 func (y *Yoitsu) WriteToDisk(dir string) error {
+	if y.noFileData {
+		return ErrNoData
+	}
+
 	if y.File == nil {
 		return fmt.Errorf("no File generated. Call Yoitsu.GenerateFile first")
 	}
