@@ -11,6 +11,11 @@ var (
 	BoolType      = NewNativeType("bool", "")
 	InterfaceType = NewNativeType("interface{}", "")
 	TimeType      = NewNativeType("time.Time", "time")
+
+	JsonNumberType = &StructType{
+		Name:   "json.Number",
+		Import: "encoding/json",
+	}
 )
 
 func NewNativeType(typeName string, importLine string) GeneratedType {
