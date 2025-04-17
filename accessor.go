@@ -1,7 +1,6 @@
 package yoitsu
 
 import (
-	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -554,7 +553,12 @@ func (y *Yoitsu) uniqueJsonPrimitives(gType StructType) (found []StructField) {
 	data := y.root.([]interface{})
 
 	for name, field := range gType.Fields {
-		switch field.Type.Type() {
+		prim, ok := field.Type.(*NativeType)
+		if !ok {
+			continue
+		}
+
+		switch prim.Type() {
 		case Float64Type.Type():
 			unique, success := extractUniqueValues[float64](data, name)
 			if success && len(unique) == len(data) {
@@ -562,11 +566,6 @@ func (y *Yoitsu) uniqueJsonPrimitives(gType StructType) (found []StructField) {
 			}
 		case StringType.Type():
 			unique, success := extractUniqueValues[string](data, name)
-			if success && len(unique) == len(data) {
-				found = append(found, *field)
-			}
-		case JsonNumberType.Type():
-			unique, success := extractUniqueValues[json.Number](data, name)
 			if success && len(unique) == len(data) {
 				found = append(found, *field)
 			}
@@ -590,13 +589,8 @@ func extractUniqueValues[T comparable](data []interface{}, field string) ([]T, b
 			continue
 		}
 
-		b, err := json.Marshal(value)
-		if err != nil {
-			return nil, false
-		}
-
-		var typedValue T
-		if err := json.Unmarshal(b, &typedValue); err != nil {
+		typedValue, ok := value.(T)
+		if !ok {
 			return nil, false
 		}
 

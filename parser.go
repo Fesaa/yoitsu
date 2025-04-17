@@ -162,5 +162,8 @@ func (p *Parser) parseFloat64(f float64) (GeneratedType, error) {
 
 	// Not every number fits inside a float64, even tho go sets the type as such ...
 	// We're generating code, so don't know what the number *CAN* be. Lets be safe
-	return JsonNumberType, nil
+	return &StructType{
+		Name:   "json.Number",
+		Import: "encoding/json",
+	}, nil
 }
