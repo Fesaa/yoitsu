@@ -136,12 +136,13 @@ func (y *Yoitsu) GenerateFile() (err error) {
 	var decls []ast.Decl
 	var allImportSpecs []ast.Spec
 
-	if len(importSpecs) > 0 {
-		allImportSpecs = append(allImportSpecs, importSpecs...)
-	}
-
-	if len(accessorImports) > 0 {
-		allImportSpecs = append(allImportSpecs, accessorImports...)
+	for _, spec := range append(importSpecs, accessorImports...) {
+		alreadyAdded := slices.ContainsFunc(allImportSpecs, func(s ast.Spec) bool {
+			return spec.(*ast.ImportSpec).Path.Value == s.(*ast.ImportSpec).Path.Value
+		})
+		if !alreadyAdded {
+			allImportSpecs = append(allImportSpecs, spec)
+		}
 	}
 
 	if len(allImportSpecs) > 0 {
