@@ -343,7 +343,23 @@ func (y *Yoitsu) groupByMethod(gType StructType, ujps []StructField) ast.Decl {
 	}
 
 	l := make([]ast.Stmt, len(ujps))
+	mapAssignments := make([]ast.Stmt, len(ujps))
 	for i, ujp := range ujps {
+		mapAssignments[i] = &ast.AssignStmt{
+			Lhs: []ast.Expr{
+				&ast.SelectorExpr{
+					X:   ast.NewIdent(tokenReceiver),
+					Sel: ast.NewIdent(tokenData + toSafeGoName(ujp.Tag)),
+				},
+			},
+			Tok: token.ASSIGN,
+			Rhs: []ast.Expr{
+				&ast.CompositeLit{
+					Type: ast.NewIdent(fmt.Sprintf(tokenMap, ujp.Type.Type(), gType.Type())),
+				},
+			},
+		}
+
 		l[i] = &ast.AssignStmt{
 			Lhs: []ast.Expr{
 				&ast.IndexExpr{
@@ -365,20 +381,18 @@ func (y *Yoitsu) groupByMethod(gType StructType, ujps []StructField) ast.Decl {
 	}
 
 	funcBody := &ast.BlockStmt{
-		List: []ast.Stmt{
-			&ast.RangeStmt{
-				Key:   ast.NewIdent("_"),
-				Value: ast.NewIdent("d"),
-				Tok:   token.DEFINE,
-				X: &ast.SelectorExpr{
-					X:   ast.NewIdent(tokenReceiver),
-					Sel: ast.NewIdent(tokenData),
-				},
-				Body: &ast.BlockStmt{
-					List: l,
-				},
+		List: append(mapAssignments, &ast.RangeStmt{
+			Key:   ast.NewIdent("_"),
+			Value: ast.NewIdent("d"),
+			Tok:   token.DEFINE,
+			X: &ast.SelectorExpr{
+				X:   ast.NewIdent(tokenReceiver),
+				Sel: ast.NewIdent(tokenData),
 			},
-		},
+			Body: &ast.BlockStmt{
+				List: l,
+			},
+		}),
 	}
 
 	return &ast.FuncDecl{
